@@ -8,8 +8,6 @@ name = "haptics-probe"
 path = "src/main.rs"
 
 [dependencies]
-aya            = { version = "0.13", features = ["async_tokio"] }
-aya-log        = "0.2"
 haptics-probe-common = { path = "../haptics-probe-common", features = ["user"] }
 bson           = "2"
 evdev          = "0.12"

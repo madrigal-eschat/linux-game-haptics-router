@@ -1,54 +1,9 @@
-mod device;
-mod translate;
-mod throttle;
-mod ebpf;
-
 use anyhow::Result;
 use bson::{doc, to_vec};
-use device::{list_ff_devices, next_ff_event, stable_id, FfEvent};
-use haptics_probe_common::{FfEffect, ProbeEvent};
-use std::collections::HashMap;
+use device::{list_ff_devices, next_ff_event, FfEvent};
 use std::io::Write;
-use tokio::sync::mpsc;
-
-/// Load and attach the eBPF program. Returns a receiver for effect-upload events.
-pub async fn load_probe() -> Result<(aya::Bpf, mpsc::Receiver<ProbeEvent>)> {
-    let bpf_bytes = include_bytes_aligned!(
-        "../../target/bpfel-unknown-none/debug/haptics-probe-ebpf"
-    );
-    let mut bpf = aya::Bpf::load(bpf_bytes)?;
-
-    // Attach tracepoints
-    let enter: &mut aya::programs::TracePoint = bpf.program_mut("sys_enter_ioctl").unwrap().try_into()?;
-    enter.load()?;
-    enter.attach("syscalls", "sys_enter_ioctl")?;
-
-    let exit: &mut aya::programs::TracePoint = bpf.program_mut("sys_exit_ioctl").unwrap().try_into()?;
-    exit.load()?;
-    exit.attach("syscalls", "sys_exit_ioctl")?;
-
-    let (tx, rx) = mpsc::channel(256);
-
-    // Poll ring buffer in background task
-    let mut ring: aya::maps::RingBuf<ProbeEvent> = bpf.map_mut("EVENTS").unwrap().try_into()?;
-    tokio::spawn(async move {
-        loop {
-            tokio::task::yield_now().await;
-            // Drain available events
-            while let Some(item) = ring.next() {
-                let bytes: &[u8] = &item;
-                if bytes.len() < std::mem::size_of::<ProbeEvent>() { continue; }
-                let event: ProbeEvent = unsafe {
-                    std::ptr::read_unaligned(bytes.as_ptr() as *const ProbeEvent)
-                };
-                let _ = tx.try_send(event);
-            }
-            tokio::time::sleep(tokio::time::Duration::from_millis(1)).await;
-        }
-    });
-
-    Ok((bpf, rx))
-}
+use translate::translate;
+use throttle::Throttle;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -61,16 +16,16 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
-    // Load eBPF probe
-    let (_bpf, mut effect_rx) = load_probe().await?;
-
+    // Load eBPF probe (stub)
+    let (_bpf_bytes, mut effect_rx) = load_probe().await?;
+    
     // Open all FF devices for evdev reading
     let devices_info = list_ff_devices()?;
-    let mut effect_store: HashMap<(u32, i16), FfEffect> = HashMap::new();
-    let mut throttle = throttle::Throttle::new();
+    let mut effect_store: std::collections::HashMap<(u32, i16), haptics_probe_common::FfEffect> = std::collections::HashMap::new();
+    let mut throttle = Throttle::new();
 
     // Spawn per-device evdev readers
-    let (ff_tx, mut ff_rx) = mpsc::channel::<(String, FfEvent)>(256);
+    let (ff_tx, mut ff_rx) = tokio::sync::mpsc::channel::<(String, FfEvent)>(256);
     for info in &devices_info {
         emit_bson_doc(&doc! {
             "type": "device_added",
@@ -82,9 +37,9 @@ async fn main() -> Result<()> {
         let path = info.path.clone();
         let device_id = info.device_id.clone();
         tokio::task::spawn_blocking(move || {
-            if let Ok(mut dev) = evdev::Device::open(&path) {
+            if let Ok(mut dev) = device::Device::open(&path) {
                 loop {
-                    match next_ff_event(&mut dev) {
+                    match device::next_ff_event(&mut dev) {
                         Ok(ev) => { let _ = tx.blocking_send((device_id.clone(), ev)); }
                         Err(e) => {
                             log::error!("evdev read error on {}: {}", device_id, e);
@@ -109,12 +64,12 @@ async fn main() -> Result<()> {
                     }
                     FfEvent::Play { effect_id } => {
                         let maybe_effect = effect_store.values()
-                            .find(|e| e.id == effect_id)
+                            .find(|e| e.kind == haptics_probe_common::FF_RUMBLE && e.id == effect_id)
                             .copied();
 
                         if let Some(effect) = maybe_effect {
                             if throttle.should_emit_haptic() {
-                                let points = translate::translate(&effect);
+                                let points = translate(&effect);
                                 if !points.is_empty() {
                                     let bson_points: Vec<bson::Document> = points.iter().map(|p| {
                                         doc! { "dt_ms": p.dt_ms as i64, "intensity": p.intensity as f64 }
