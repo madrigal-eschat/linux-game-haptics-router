@@ -1,0 +1,7 @@
+[workspace]
+members = [
+    "haptics-probe-common",
+    "haptics-probe-ebpf",
+    "haptics-probe",
+]
+resolver = "2"

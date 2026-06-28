@@ -1,0 +1,14 @@
+[package]
+name = "haptics-probe-ebpf"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+aya-bpf = "0.1"
+aya-log-ebpf = "0.1"
+haptics-probe-common = { path = "../haptics-probe-common" }
+aya = { version = "0.13", features = ["async_tokio"] }
+
+[[bin]]
+name = "haptics-probe-ebpf"
+path = "src/main.rs"

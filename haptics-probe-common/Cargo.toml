@@ -1,0 +1,11 @@
+[package]
+name = "haptics-probe-common"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+default = []
+user = ["bson"]
+
+[dependencies]
+bson = { version = "2", optional = true }
