@@ -223,7 +223,8 @@ mod tests {
 
     #[test]
     fn periodic_sine_peak_near_quarter_period() {
-        let e = periodic_effect(0x5a, 0x7FFF, 40, 200, Envelope::default());
+        // period=80 so its quarter period (20ms) lands on a sample boundary
+        let e = periodic_effect(0x5a, 0x7FFF, 80, 200, Envelope::default());
         let pts = translate(&e);
         let pt = pts.iter().find(|p| p.dt_ms == 20).unwrap();
         assert!(pt.intensity > 0.8);
@@ -242,7 +243,9 @@ mod tests {
     fn envelope_attack_ramps_up() {
         let env = Envelope { attack_length: 100, attack_level: 0,
                              fade_length: 0, fade_level: 0x7FFF };
-        let e = periodic_effect(0x5a, 0x7FFF, 20, 200, env);
+        // period=400 so t=100 (end of attack) lands on the waveform's quarter-period peak,
+        // isolating the envelope's effect from a coincidental waveform zero-crossing
+        let e = periodic_effect(0x5a, 0x7FFF, 400, 200, env);
         let pts = translate(&e);
         assert!(pts[0].intensity < 0.1);
         let p100 = pts.iter().find(|p| p.dt_ms == 100).unwrap();

@@ -1,42 +1,41 @@
 #![no_std]
 #![no_main]
 
-use aya_bpf::macros::map;
-use aya_bpf::macros::tracepoint;
-use aya_bpf::programs::TracePointContext;
+use aya_ebpf::macros::map;
+use aya_ebpf::macros::tracepoint;
+use aya_ebpf::programs::TracePointContext;
 use haptics_probe_common::{EnterScratch, FfEffect, ProbeEvent, eviocsff_nr};
-use aya_bpf::helpers::bpf_probe_read_user_buf;
+use aya_ebpf::helpers::bpf_probe_read_user_buf;
 
 /// Per-thread scratch: tgid<<32|pid → EnterScratch
 #[map]
-static mut ENTER_SCRATCH: aya_bpf::maps::HashMap<u64, EnterScratch> =
-    aya_bpf::maps::HashMap::with_max_entries(1024, 0);
+static mut ENTER_SCRATCH: aya_ebpf::maps::HashMap<u64, EnterScratch> =
+    aya_ebpf::maps::HashMap::with_max_entries(1024, 0);
 
 /// Effect store: (tgid<<32|effect_id) → FfEffect
 #[map]
-pub static mut EFFECT_STORE: aya_bpf::maps::HashMap<u64, FfEffect> =
-    aya_bpf::maps::HashMap::with_max_entries(4096, 0);
+pub static mut EFFECT_STORE: aya_ebpf::maps::HashMap<u64, FfEffect> =
+    aya_ebpf::maps::HashMap::with_max_entries(4096, 0);
 
 /// Ring buffer for events to userspace
 #[map]
-static mut EVENTS: aya_bpf::maps::RingBuf = aya_bpf::maps::RingBuf::with_byte_size(256 * 1024, 0);
+static mut EVENTS: aya_ebpf::maps::RingBuf = aya_ebpf::maps::RingBuf::with_byte_size(256 * 1024, 0);
 
 /// Tracepoint: sys_enter_ioctl
 #[tracepoint]
 pub fn sys_enter_ioctl(ctx: TracePointContext) -> i32 {
-    match try_enter(ctx) {
+    match try_enter(&ctx) {
         Ok(_) => 0,
         Err(_) => 0,
     }
 }
 
 fn try_enter(ctx: &TracePointContext) -> Result<(), i64> {
-    let cmd: u64 = unsafe { bpf_probe_read_kernel(ctx, 24).map_err(|_| 0i64)? };
+    let cmd: u64 = unsafe { ctx.read_at(24).map_err(|_| 0i64)? };
     if cmd as u32 != eviocsff_nr() {
         return Ok(());
     }
 
-    let fd: u64 = unsafe { ctx.read_at(16).map_err(|_| 0i64)? };
     let arg: u64 = unsafe { ctx.read_at(32).map_err(|_| 0i64)? };
 
     let mut effect = FfEffect {
@@ -58,7 +57,7 @@ fn try_enter(ctx: &TracePointContext) -> Result<(), i64> {
     };
     unsafe { bpf_probe_read_user_buf(arg as *const u8, effect_bytes).map_err(|_| 0i64)? };
 
-    let tgid_pid = unsafe { aya_bpf::helpers::bpf_get_current_pid_tgid() };
+    let tgid_pid = unsafe { aya_ebpf::helpers::bpf_get_current_pid_tgid() };
     let scratch = EnterScratch {
         ff_effect_ptr: arg,
         effect,
@@ -72,14 +71,14 @@ fn try_enter(ctx: &TracePointContext) -> Result<(), i64> {
 /// Tracepoint: sys_exit_ioctl
 #[tracepoint]
 pub fn sys_exit_ioctl(ctx: TracePointContext) -> i32 {
-    match try_exit(ctx) {
+    match try_exit(&ctx) {
         Ok(_) => 0,
         Err(_) => 0,
     }
 }
 
 fn try_exit(ctx: &TracePointContext) -> Result<(), i64> {
-    let tgid_pid = unsafe { aya_bpf::helpers::bpf_get_current_pid_tgid() };
+    let tgid_pid = unsafe { aya_ebpf::helpers::bpf_get_current_pid_tgid() };
     let scratch = unsafe { ENTER_SCRATCH.get(&tgid_pid) }.ok_or(0i64)?;
 
     let mut id_bytes = [0u8; 2];

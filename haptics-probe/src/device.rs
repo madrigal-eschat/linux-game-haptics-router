@@ -1,8 +1,6 @@
 use anyhow::Result;
-use haptics_probe_common::FfEffect;
-use std::str::FromStr;
-use evdev::{Device, EventType, InputEvent};
-use std::path::{Path, PathBuf};
+use evdev::{Device, EventType};
+use std::path::Path;
 
 /// Metadata about one FF-capable input device.
 #[derive(Debug, Clone, serde::Serialize)]
@@ -61,8 +59,8 @@ pub fn next_ff_event(dev: &mut Device) -> Result<FfEvent> {
     loop {
         for ev in dev.fetch_events()? {
             if ev.event_type() == EventType::FORCEFEEDBACK {
-                let code: i32 = ev.code();
-                let value: i16 = ev.value();
+                let code: u16 = ev.code();
+                let value: i32 = ev.value();
                 let effect_id = code as i16;
                 return Ok(if value != 0 {
                     FfEvent::Play { effect_id }

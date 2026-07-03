@@ -1,7 +1,7 @@
 use anyhow::Result;
-use aya::maps::{HashMap as AyaHashMap, RingBuf};
+use aya::maps::RingBuf;
 use aya::programs::TracePoint;
-use aya::{include_bytes_aligned, Bpf};
+use aya::{include_bytes_aligned, Ebpf};
 use haptics_probe_common::ProbeEvent;
 use tokio::sync::mpsc;
 
@@ -13,17 +13,10 @@ pub struct EffectUploaded {
 }
 
 /// Load and attach the eBPF program. Returns a receiver for effect-upload events.
-pub async fn load_probe() -> Result<(Bpf, mpsc::Receiver<EffectUploaded>)> {
-    #[cfg(debug_assertions)]
-    let bpf_bytes = include_bytes_aligned!(
-        "../../target/bpfel-unknown-none/debug/haptics-probe-ebpf"
-    );
-    #[cfg(not(debug_assertions))]
-    let bpf_bytes = include_bytes_aligned!(
-        "../../target/bpfel-unknown-none/release/haptics-probe-ebpf"
-    );
+pub async fn load_probe() -> Result<(Ebpf, mpsc::Receiver<EffectUploaded>)> {
+    let bpf_bytes = include_bytes_aligned!(concat!(env!("OUT_DIR"), "/haptics-probe-ebpf"));
 
-    let mut bpf = Bpf::load(bpf_bytes)?;
+    let mut bpf = Ebpf::load(bpf_bytes)?;
 
     // Attach tracepoints
     let enter: &mut TracePoint = bpf.program_mut("sys_enter_ioctl").unwrap().try_into()?;
@@ -36,8 +29,9 @@ pub async fn load_probe() -> Result<(Bpf, mpsc::Receiver<EffectUploaded>)> {
 
     let (tx, rx) = mpsc::channel(256);
 
-    // Poll ring buffer in background task
-    let mut ring: RingBuf<_> = bpf.map_mut("EVENTS").unwrap().try_into()?;
+    // Poll ring buffer in background task (owned map so it outlives this function
+    // independent of `bpf`, which the caller keeps alive to hold the attached programs)
+    let mut ring = RingBuf::try_from(bpf.take_map("EVENTS").unwrap())?;
     tokio::spawn(async move {
         loop {
             tokio::task::yield_now().await;

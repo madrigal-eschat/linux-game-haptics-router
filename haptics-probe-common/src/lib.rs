@@ -83,6 +83,6 @@ pub struct ProbeEvent {
     pub tgid: u32,
     /// Assigned effect id
     pub effect_id: i16,
-    _pad: u16,
+    pub _pad: u16,
     pub effect: FfEffect,
 }

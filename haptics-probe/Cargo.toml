@@ -8,6 +8,8 @@ name = "haptics-probe"
 path = "src/main.rs"
 
 [dependencies]
+aya            = "0.14"
+aya-log        = "0.3"
 haptics-probe-common = { path = "../haptics-probe-common", features = ["user"] }
 bson           = "2"
 evdev          = "0.12"
@@ -19,4 +21,4 @@ env_logger     = "0.11"
 serde_json     = "1"
 
 [build-dependencies]
-aya-build = "0.1"
+aya-build = "0.2"
