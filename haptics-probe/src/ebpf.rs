@@ -27,6 +27,8 @@ pub async fn load_probe() -> Result<(Ebpf, mpsc::Receiver<EffectUploaded>)> {
     exit.load()?;
     exit.attach("syscalls", "sys_exit_ioctl")?;
 
+    log::info!("eBPF probe loaded and tracepoints attached (sys_enter_ioctl, sys_exit_ioctl)");
+
     let (tx, rx) = mpsc::channel(256);
 
     // Poll ring buffer in background task (owned map so it outlives this function
@@ -41,6 +43,10 @@ pub async fn load_probe() -> Result<(Ebpf, mpsc::Receiver<EffectUploaded>)> {
                 let event: ProbeEvent = unsafe {
                     std::ptr::read_unaligned(bytes.as_ptr() as *const ProbeEvent)
                 };
+                log::info!(
+                    "ring buffer: effect uploaded tgid={} effect_id={} kind={}",
+                    event.tgid, event.effect_id, event.effect.kind
+                );
                 let _ = tx.try_send(EffectUploaded {
                     tgid: event.tgid,
                     effect_id: event.effect_id,

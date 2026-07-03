@@ -68,11 +68,24 @@ pub struct EnterScratch {
     pub effect: FfEffect,
 }
 
+/// Real size of the kernel's `struct ff_effect` on x86_64 (48 bytes: the
+/// `union { ... }` member holds a `__s16 __user *custom_data` pointer inside
+/// `ff_periodic_effect`, forcing 8-byte union alignment/padding). This is
+/// NOT the same as `size_of::<FfEffect>()` — `FfEffect` above is our own
+/// compact capture struct, not a copy of the kernel layout. EVIOCSFF's
+/// ioctl number encodes the *kernel's* struct size, so we must use the
+/// kernel's real size here or the computed command number won't match what
+/// userspace actually issues.
+const KERNEL_FF_EFFECT_SIZE: u32 = 48;
+
 /// Compute EVIOCSFF ioctl number at compile time.
-/// _IOW('E', 0x52, ff_effect) = (1<<30) | (size<<16) | ('E'<<8) | 0x52
+/// #define EVIOCSFF _IOC(_IOC_WRITE, 'E', 0x80, sizeof(struct ff_effect))
+/// = (1<<30) | (size<<16) | ('E'<<8) | 0x80
+/// (verified against a live strace: real value is 0x40304580 for size=48 —
+/// confirms 'E'=0x45 and size=48 were already right; only the nr byte
+/// (0x80, not 0x52) was wrong)
 pub const fn eviocsff_nr() -> u32 {
-    let size = core::mem::size_of::<FfEffect>() as u32;
-    (1u32 << 30) | ((size & 0x3fff) << 16) | (0x45u32 << 8) | 0x52u32
+    (1u32 << 30) | ((KERNEL_FF_EFFECT_SIZE & 0x3fff) << 16) | (0x45u32 << 8) | 0x80u32
 }
 
 /// Event emitted from eBPF ring buffer to userspace
