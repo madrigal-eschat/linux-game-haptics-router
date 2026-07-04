@@ -68,14 +68,28 @@ pub struct EnterScratch {
     pub effect: FfEffect,
 }
 
-/// Real size of the kernel's `struct ff_effect` on x86_64 (48 bytes: the
-/// `union { ... }` member holds a `__s16 __user *custom_data` pointer inside
-/// `ff_periodic_effect`, forcing 8-byte union alignment/padding). This is
-/// NOT the same as `size_of::<FfEffect>()` — `FfEffect` above is our own
-/// compact capture struct, not a copy of the kernel layout. EVIOCSFF's
-/// ioctl number encodes the *kernel's* struct size, so we must use the
-/// kernel's real size here or the computed command number won't match what
-/// userspace actually issues.
+/// Real size of the kernel's `struct ff_effect` under the LP64 data model
+/// (48 bytes: the `union { ... }` member holds a `__s16 __user *custom_data`
+/// pointer inside `ff_periodic_effect`, forcing 8-byte union alignment/
+/// padding). Natural alignment for LP64 (8-byte pointers, 4-byte `u32`,
+/// 2-byte fields, no arch-specific packing) is identical on x86_64 and
+/// aarch64, so this one constant is correct for both — it is NOT an
+/// x86_64-only number. This is also NOT the same as `size_of::<FfEffect>()`
+/// — `FfEffect` above is our own compact capture struct, not a copy of the
+/// kernel layout. EVIOCSFF's ioctl number encodes the *kernel's* struct
+/// size, so we must use the kernel's real size here or the computed command
+/// number won't match what userspace actually issues.
+///
+/// Guarded to the two LP64 targets this has actually been verified against
+/// (x86_64 via strace: real value is 0x40304580 for size=48). Porting to
+/// any other target requires re-deriving `struct ff_effect`'s size for that
+/// target's ABI before trusting this constant.
+#[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+compile_error!(
+    "KERNEL_FF_EFFECT_SIZE=48 has only been verified for x86_64/aarch64 (LP64, natural \
+     alignment) — re-derive struct ff_effect's real size for this target before adding it \
+     to this cfg allowlist."
+);
 const KERNEL_FF_EFFECT_SIZE: u32 = 48;
 
 /// Compute EVIOCSFF ioctl number at compile time.

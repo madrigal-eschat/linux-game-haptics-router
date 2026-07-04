@@ -4,7 +4,8 @@ mod playback;
 mod translate;
 mod throttle;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
+use clap::Parser;
 use device::{list_ff_devices, next_ff_event, FfEvent};
 use haptics_probe_common::FfEffect;
 use playback::{DeviceMap, Playback};
@@ -13,63 +14,45 @@ use throttle::Throttle;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::mpsc;
 
+#[derive(Parser)]
 struct Args {
-    ws_url: String,
+    /// Print FF-capable input devices as JSON and exit
+    #[arg(long)]
+    list_devices: bool,
+
+    /// Buttplug/Intiface websocket URL to connect to
+    #[arg(long, required_unless_present = "list_devices")]
+    ws_url: Option<String>,
+
+    /// Global intensity scale applied to every haptic command
+    #[arg(long, default_value_t = 1.0)]
     scale: f32,
+
+    /// JSON map of evdev device_id -> target buttplug device indices (or null to broadcast)
+    #[arg(long, value_parser = parse_device_map, default_value = "{}")]
     device_map: DeviceMap,
 }
 
-fn parse_args() -> Result<Args> {
-    let raw: Vec<String> = std::env::args().collect();
-    let mut ws_url = None;
-    let mut scale = 1.0f32;
-    let mut device_map = DeviceMap::new();
-    let mut i = 1;
-    while i < raw.len() {
-        match raw[i].as_str() {
-            "--ws-url" => {
-                ws_url = Some(raw.get(i + 1).context("--ws-url needs a value")?.clone());
-                i += 2;
-            }
-            "--scale" => {
-                scale = raw
-                    .get(i + 1)
-                    .context("--scale needs a value")?
-                    .parse()
-                    .context("--scale must be a float")?;
-                i += 2;
-            }
-            "--device-map" => {
-                let json = raw.get(i + 1).context("--device-map needs a value")?;
-                device_map = serde_json::from_str(json).context("--device-map must be JSON")?;
-                i += 2;
-            }
-            other => anyhow::bail!("unrecognized argument: {other}"),
-        }
-    }
-    Ok(Args {
-        ws_url: ws_url.context("--ws-url is required")?,
-        scale,
-        device_map,
-    })
+fn parse_device_map(json: &str) -> Result<DeviceMap, String> {
+    serde_json::from_str(json).map_err(|e| format!("--device-map must be JSON: {e}"))
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
-    let raw_args: Vec<String> = std::env::args().collect();
 
-    if raw_args.get(1).map(|s| s.as_str()) == Some("--list-devices") {
+    let args = Args::parse();
+
+    if args.list_devices {
         let devices = list_ff_devices()?;
         println!("{}", serde_json::to_string(&devices)?);
         return Ok(());
     }
 
-    let args = parse_args()?;
-
     // Connect to the buttplug/intiface engine ourselves — playback lives
     // entirely in this process now, Python just supplies config.
-    let playback = Playback::connect_with_retry(&args.ws_url, args.scale, args.device_map).await?;
+    let ws_url = args.ws_url.expect("clap requires --ws-url unless --list-devices");
+    let playback = Playback::connect_with_retry(&ws_url, args.scale, args.device_map).await?;
 
     // Live scale updates from Python arrive as JSON lines on stdin, e.g.
     // {"scale": 0.8}\n — everything else about playback is fixed at startup.

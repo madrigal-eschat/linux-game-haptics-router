@@ -120,10 +120,6 @@ impl Playback {
         )
     }
 
-    fn resolve_targets(&self, device_id: &str) -> Option<Vec<u32>> {
-        resolve_targets(&self.device_map, device_id)
-    }
-
     /// Sends to every targeted device concurrently — a device stalled on I/O
     /// must not delay delivery to the others sharing this tick.
     async fn send_scalar(client: &ButtplugClient, targets: &Option<Vec<u32>>, intensity: f32) {
@@ -164,7 +160,7 @@ impl Playback {
     async fn play_sequence(self: Arc<Self>, device_id: String, points: Vec<HapticPoint>, gen: u64) {
         let schedule = Self::interpolate_points(&points);
         log::info!("{}", Self::format_schedule_log(&device_id, &points, &schedule));
-        let targets = self.resolve_targets(&device_id);
+        let targets = resolve_targets(&self.device_map, &device_id);
         let start = tokio::time::Instant::now();
         for (t_ms, intensity) in &schedule {
             tokio::time::sleep_until(start + Duration::from_millis(*t_ms as u64)).await;
@@ -182,7 +178,7 @@ impl Playback {
             handle.abort();
         }
         drop(tasks);
-        let targets = self.resolve_targets(device_id);
+        let targets = resolve_targets(&self.device_map, device_id);
         Self::send_scalar(&self.client, &targets, 0.0).await;
     }
 
