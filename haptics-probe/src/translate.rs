@@ -93,7 +93,7 @@ fn ramp_points(effect: &FfEffect) -> Vec<HapticPoint> {
     let end_level   = effect.u[1] as i16;
     let length      = effect.replay_length as u32;
     (0..=length).step_by(SAMPLE_INTERVAL_MS as usize)
-        .chain(if length % SAMPLE_INTERVAL_MS == 0 { None } else { Some(length) })
+        .chain(if length.is_multiple_of(SAMPLE_INTERVAL_MS) { None } else { Some(length) })
         .map(|t| {
             let progress = if length == 0 { 0.0 } else { t as f32 / length as f32 };
             let level = start_level as f32 + (end_level - start_level) as f32 * progress;
@@ -212,10 +212,12 @@ mod tests {
     // ── periodic ──
 
     #[test]
-    fn periodic_sine_samples_at_20ms_intervals() {
+    fn periodic_sine_samples_at_sample_interval() {
         let e = periodic_effect(0x5a, 0x7FFF, 100, 200, Envelope::default());
         let pts = translate(&e);
-        assert_eq!(pts.len(), 11);
+        // 0..200 stepped by SAMPLE_INTERVAL_MS=25 (0,25,..,175) plus the
+        // trailing zero-intensity boundary point at 200 = 9 points.
+        assert_eq!(pts.len(), 9);
         assert_eq!(pts[0].dt_ms, 0);
         assert_eq!(pts.last().unwrap().dt_ms, 200);
         assert_eq!(pts.last().unwrap().intensity, 0.0);
@@ -223,10 +225,11 @@ mod tests {
 
     #[test]
     fn periodic_sine_peak_near_quarter_period() {
-        // period=80 so its quarter period (20ms) lands on a sample boundary
-        let e = periodic_effect(0x5a, 0x7FFF, 80, 200, Envelope::default());
+        // period=100 so its quarter period (25ms) lands exactly on a
+        // SAMPLE_INTERVAL_MS=25 sample boundary
+        let e = periodic_effect(0x5a, 0x7FFF, 100, 200, Envelope::default());
         let pts = translate(&e);
-        let pt = pts.iter().find(|p| p.dt_ms == 20).unwrap();
+        let pt = pts.iter().find(|p| p.dt_ms == 25).unwrap();
         assert!(pt.intensity > 0.8);
     }
 
