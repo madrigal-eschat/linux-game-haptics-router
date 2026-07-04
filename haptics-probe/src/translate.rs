@@ -1,7 +1,7 @@
 use core::f32::consts::PI;
 use haptics_probe_common::{FfEffect, FF_RUMBLE, FF_PERIODIC, FF_CONSTANT, FF_RAMP, Waveform, Envelope};
 
-pub const SAMPLE_INTERVAL_MS: u32 = 20;
+pub const SAMPLE_INTERVAL_MS: u32 = 25;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct HapticPoint {
