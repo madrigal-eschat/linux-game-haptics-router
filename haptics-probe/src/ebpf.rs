@@ -3,6 +3,7 @@ use aya::maps::RingBuf;
 use aya::programs::TracePoint;
 use aya::{include_bytes_aligned, Ebpf};
 use haptics_probe_common::ProbeEvent;
+use tokio::io::unix::AsyncFd;
 use tokio::sync::mpsc;
 
 #[derive(Debug)]
@@ -32,11 +33,21 @@ pub async fn load_probe() -> Result<(Ebpf, mpsc::Receiver<EffectUploaded>)> {
     let (tx, rx) = mpsc::channel(256);
 
     // Poll ring buffer in background task (owned map so it outlives this function
-    // independent of `bpf`, which the caller keeps alive to hold the attached programs)
-    let mut ring = RingBuf::try_from(bpf.take_map("EVENTS").unwrap())?;
+    // independent of `bpf`, which the caller keeps alive to hold the attached programs).
+    // The ring buf map fd raises EPOLLIN when new data lands, so we ride that via
+    // AsyncFd instead of busy-polling with yield_now()/sleep — no CPU spent when idle.
+    let ring = RingBuf::try_from(bpf.take_map("EVENTS").unwrap())?;
+    let mut async_fd = AsyncFd::new(ring)?;
     tokio::spawn(async move {
         loop {
-            tokio::task::yield_now().await;
+            let mut guard = match async_fd.readable_mut().await {
+                Ok(guard) => guard,
+                Err(e) => {
+                    log::error!("ring buffer fd unusable: {}", e);
+                    return;
+                }
+            };
+            let ring = guard.get_inner_mut();
             while let Some(item) = ring.next() {
                 let bytes: &[u8] = &item;
                 if bytes.len() < std::mem::size_of::<ProbeEvent>() { continue; }
@@ -53,7 +64,7 @@ pub async fn load_probe() -> Result<(Ebpf, mpsc::Receiver<EffectUploaded>)> {
                     effect: event.effect,
                 });
             }
-            tokio::time::sleep(tokio::time::Duration::from_millis(1)).await;
+            guard.clear_ready();
         }
     });
 
