@@ -57,7 +57,7 @@ pub struct FfEffect {
 pub const FF_RUMBLE:   u16 = 0x50;
 pub const FF_PERIODIC: u16 = 0x51;
 pub const FF_CONSTANT: u16 = 0x52;
-pub const FF_RAMP:     u16 = 0x58;
+pub const FF_RAMP:     u16 = 0x57;
 
 /// Scratch entry: saved pointer + effect bytes before the kernel writes back the id.
 /// Stored per-thread (keyed by tgid<<32|pid) from enter until exit.

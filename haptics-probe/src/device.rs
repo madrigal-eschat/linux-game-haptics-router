@@ -57,7 +57,9 @@ pub enum FfEvent {
 /// Read the next FF play/stop event from an evdev device (non-async).
 pub fn next_ff_event(dev: &mut Device) -> Result<FfEvent> {
     loop {
+        let mut saw_any = false;
         for ev in dev.fetch_events()? {
+            saw_any = true;
             if ev.event_type() == EventType::FORCEFEEDBACK {
                 let code: u16 = ev.code();
                 let value: i32 = ev.value();
@@ -68,6 +70,11 @@ pub fn next_ff_event(dev: &mut Device) -> Result<FfEvent> {
                     FfEvent::Stop { effect_id }
                 });
             }
+        }
+        // fetch_events() normally blocks in-kernel until events are ready, but
+        // guard against a spin if it ever returns an empty-but-Ok batch.
+        if !saw_any {
+            std::thread::sleep(std::time::Duration::from_millis(5));
         }
     }
 }

@@ -124,19 +124,26 @@ impl Playback {
         resolve_targets(&self.device_map, device_id)
     }
 
+    /// Sends to every targeted device concurrently — a device stalled on I/O
+    /// must not delay delivery to the others sharing this tick.
     async fn send_scalar(client: &ButtplugClient, targets: &Option<Vec<u32>>, intensity: f32) {
         let intensity = intensity.clamp(0.0, 1.0);
+        let cmd = ClientDeviceOutputCommand::Vibrate(ClientDeviceCommandValue::Percent(intensity as f64));
+        let mut sends = tokio::task::JoinSet::new();
         for (idx, dev) in client.devices() {
             if let Some(t) = targets {
                 if !t.contains(&idx) {
                     continue;
                 }
             }
-            let cmd = ClientDeviceOutputCommand::Vibrate(ClientDeviceCommandValue::Percent(intensity as f64));
-            if let Err(e) = dev.run_output(&cmd).await {
-                log::warn!("scalar command failed for device {} ({}): {}", idx, dev.name(), e);
-            }
+            let cmd = cmd.clone();
+            sends.spawn(async move {
+                if let Err(e) = dev.run_output(&cmd).await {
+                    log::warn!("scalar command failed for device {} ({}): {}", idx, dev.name(), e);
+                }
+            });
         }
+        while sends.join_next().await.is_some() {}
     }
 
     /// Cancel any sequence already running for this device_id and start a

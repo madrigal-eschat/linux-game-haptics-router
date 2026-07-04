@@ -8,15 +8,21 @@ use haptics_probe_common::{EnterScratch, FfEffect, ProbeEvent, eviocsff_nr};
 use aya_ebpf::helpers::bpf_probe_read_user_buf;
 use aya_ebpf::bpf_printk;
 
-/// Per-thread scratch: tgid<<32|pid → EnterScratch
+/// Per-thread scratch: tgid<<32|pid → EnterScratch.
+/// LRU because a killed/aborted thread never reaches sys_exit_ioctl to
+/// remove its entry — without eviction this leaks one slot per such thread
+/// until the map fills and inserts start silently failing.
 #[map]
-static mut ENTER_SCRATCH: aya_ebpf::maps::HashMap<u64, EnterScratch> =
-    aya_ebpf::maps::HashMap::with_max_entries(1024, 0);
+static mut ENTER_SCRATCH: aya_ebpf::maps::LruHashMap<u64, EnterScratch> =
+    aya_ebpf::maps::LruHashMap::with_max_entries(1024, 0);
 
-/// Effect store: (tgid<<32|effect_id) → FfEffect
+/// Effect store: (tgid<<32|effect_id) → FfEffect.
+/// LRU for the same reason: nothing removes an entry when its owning
+/// process exits or the effect is freed via EVIOCRMFF, so long-running
+/// sessions across many games would otherwise exhaust a plain HashMap.
 #[map]
-pub static mut EFFECT_STORE: aya_ebpf::maps::HashMap<u64, FfEffect> =
-    aya_ebpf::maps::HashMap::with_max_entries(4096, 0);
+pub static mut EFFECT_STORE: aya_ebpf::maps::LruHashMap<u64, FfEffect> =
+    aya_ebpf::maps::LruHashMap::with_max_entries(4096, 0);
 
 /// Ring buffer for events to userspace
 #[map]
