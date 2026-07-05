@@ -64,22 +64,19 @@ impl App {
             "effect_store: inserting tgid={} effect_id={}",
             uploaded.tgid, uploaded.effect_id
         );
-        // A numeric effect_id is only meaningful for the most recent upload;
-        // the kernel reuses ids across processes/sessions and stale entries
-        // from prior tgids are never otherwise cleaned up (no Stop write
-        // arrives for effects that finish naturally or are removed via
-        // EVIOCRMFF), so purge any other tgid's entry for this id first.
-        self.effect_store
-            .retain(|(_, id), _| *id != uploaded.effect_id);
-        self.effect_store
-            .insert((uploaded.tgid, uploaded.effect_id), uploaded.effect);
+        upsert_effect(
+            &mut self.effect_store,
+            uploaded.tgid,
+            uploaded.effect_id,
+            uploaded.effect,
+        );
     }
 
     pub async fn handle_ff_event(&mut self, device_id: String, ev: FfEvent) {
         match ev {
             FfEvent::Stop { effect_id } => {
                 log::info!("FF event: Stop effect_id={} on {}", effect_id, device_id);
-                self.effect_store.retain(|(_, id), _| *id != effect_id);
+                purge_effect_id(&mut self.effect_store, effect_id);
                 self.playback.stop(&device_id).await;
             }
             FfEvent::Play { effect_id } => {
@@ -162,4 +159,78 @@ fn spawn_device_reader(info: &DeviceInfo, ff_tx: &mpsc::Sender<(String, FfEvent)
             backoff = std::cmp::min(backoff * 2, MAX_BACKOFF);
         }
     });
+}
+
+/// Remove any entry for `effect_id`, regardless of which tgid owns it.
+fn purge_effect_id(store: &mut HashMap<(u32, i16), FfEffect>, effect_id: i16) {
+    store.retain(|(_, id), _| *id != effect_id);
+}
+
+/// A numeric effect_id is only meaningful for the most recent upload; the
+/// kernel reuses ids across processes/sessions and stale entries from prior
+/// tgids are never otherwise cleaned up (no Stop write arrives for effects
+/// that finish naturally or are removed via EVIOCRMFF), so purge any other
+/// tgid's entry for this id before inserting the new one.
+fn upsert_effect(
+    store: &mut HashMap<(u32, i16), FfEffect>,
+    tgid: u32,
+    effect_id: i16,
+    effect: FfEffect,
+) {
+    purge_effect_id(store, effect_id);
+    store.insert((tgid, effect_id), effect);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn dummy_effect() -> FfEffect {
+        FfEffect {
+            kind: 0, id: 0, direction: 0,
+            trigger_button: 0, trigger_interval: 0,
+            replay_length: 0, replay_delay: 0,
+            u: [0u16; 7],
+        }
+    }
+
+    #[test]
+    fn upsert_replaces_same_tgid_and_id() {
+        let mut store = HashMap::new();
+        upsert_effect(&mut store, 1, 5, dummy_effect());
+        upsert_effect(&mut store, 1, 5, dummy_effect());
+        assert_eq!(store.len(), 1);
+        assert!(store.contains_key(&(1, 5)));
+    }
+
+    #[test]
+    fn upsert_evicts_other_tgid_with_same_effect_id() {
+        let mut store = HashMap::new();
+        upsert_effect(&mut store, 1, 5, dummy_effect());
+        upsert_effect(&mut store, 2, 5, dummy_effect());
+        assert_eq!(store.len(), 1);
+        assert!(!store.contains_key(&(1, 5)));
+        assert!(store.contains_key(&(2, 5)));
+    }
+
+    #[test]
+    fn upsert_keeps_other_effect_ids_for_same_tgid() {
+        let mut store = HashMap::new();
+        upsert_effect(&mut store, 1, 5, dummy_effect());
+        upsert_effect(&mut store, 1, 6, dummy_effect());
+        upsert_effect(&mut store, 1, 5, dummy_effect());
+        assert_eq!(store.len(), 2);
+        assert!(store.contains_key(&(1, 5)));
+        assert!(store.contains_key(&(1, 6)));
+    }
+
+    #[test]
+    fn purge_effect_id_removes_regardless_of_tgid() {
+        let mut store = HashMap::new();
+        store.insert((1, 5), dummy_effect());
+        store.insert((2, 7), dummy_effect());
+        purge_effect_id(&mut store, 5);
+        assert_eq!(store.len(), 1);
+        assert!(store.contains_key(&(2, 7)));
+    }
 }

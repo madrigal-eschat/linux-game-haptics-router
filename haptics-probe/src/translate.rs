@@ -174,6 +174,33 @@ mod tests {
         e
     }
 
+    fn constant_effect(level: i16, length_ms: u16, env: Envelope) -> FfEffect {
+        let mut e = FfEffect {
+            kind: FF_CONSTANT, id: 0, direction: 0,
+            trigger_button: 0, trigger_interval: 0,
+            replay_length: length_ms, replay_delay: 0,
+            u: [0u16; 7],
+        };
+        e.u[0] = level as u16;
+        e.u[1] = env.attack_length;
+        e.u[2] = env.attack_level;
+        e.u[3] = env.fade_length;
+        e.u[4] = env.fade_level;
+        e
+    }
+
+    fn ramp_effect(start_level: i16, end_level: i16, length_ms: u16) -> FfEffect {
+        let mut e = FfEffect {
+            kind: FF_RAMP, id: 0, direction: 0,
+            trigger_button: 0, trigger_interval: 0,
+            replay_length: length_ms, replay_delay: 0,
+            u: [0u16; 7],
+        };
+        e.u[0] = start_level as u16;
+        e.u[1] = end_level as u16;
+        e
+    }
+
     // ── rumble ──
 
     #[test]
@@ -243,6 +270,35 @@ mod tests {
     }
 
     #[test]
+    fn periodic_triangle_peaks_at_half_period() {
+        // period=100, length=100: samples land at t=0,25,50,75 within one cycle
+        let e = periodic_effect(0x59, 0x7FFF, 100, 100, Envelope::default());
+        let pts = translate(&e);
+        let p0 = pts.iter().find(|p| p.dt_ms == 0).unwrap();
+        let p50 = pts.iter().find(|p| p.dt_ms == 50).unwrap();
+        assert!(p0.intensity < 0.1);
+        assert!(p50.intensity > 0.9);
+    }
+
+    #[test]
+    fn periodic_saw_up_increases_over_period() {
+        let e = periodic_effect(0x5b, 0x7FFF, 100, 100, Envelope::default());
+        let pts = translate(&e);
+        let p0 = pts.iter().find(|p| p.dt_ms == 0).unwrap();
+        let p75 = pts.iter().find(|p| p.dt_ms == 75).unwrap();
+        assert!(p75.intensity > p0.intensity);
+    }
+
+    #[test]
+    fn periodic_saw_down_decreases_over_period() {
+        let e = periodic_effect(0x5c, 0x7FFF, 100, 100, Envelope::default());
+        let pts = translate(&e);
+        let p0 = pts.iter().find(|p| p.dt_ms == 0).unwrap();
+        let p75 = pts.iter().find(|p| p.dt_ms == 75).unwrap();
+        assert!(p75.intensity < p0.intensity);
+    }
+
+    #[test]
     fn envelope_attack_ramps_up() {
         let env = Envelope { attack_length: 100, attack_level: 0,
                              fade_length: 0, fade_level: 0x7FFF };
@@ -253,6 +309,20 @@ mod tests {
         assert!(pts[0].intensity < 0.1);
         let p100 = pts.iter().find(|p| p.dt_ms == 100).unwrap();
         assert!(p100.intensity > 0.8);
+    }
+
+    #[test]
+    fn envelope_fade_ramps_down() {
+        // constant effect isolates the envelope's fade scaling from any
+        // waveform-driven variation
+        let env = Envelope { attack_length: 0, attack_level: 0,
+                             fade_length: 100, fade_level: 0 };
+        let e = constant_effect(0x7FFF, 200, env);
+        let pts = translate(&e);
+        let p0 = pts.iter().find(|p| p.dt_ms == 0).unwrap();
+        let p175 = pts.iter().find(|p| p.dt_ms == 175).unwrap();
+        assert!(p0.intensity > 0.9);
+        assert!(p175.intensity < 0.5 && p175.intensity > 0.1);
     }
 
     // ── constant ──
@@ -273,6 +343,35 @@ mod tests {
         }
     }
 
+    // ── ramp ──
+
+    #[test]
+    fn ramp_interpolates_start_to_end() {
+        let e = ramp_effect(0, 0x7FFF, 100);
+        let pts = translate(&e);
+        assert_eq!(pts[0].dt_ms, 0);
+        assert!(pts[0].intensity < 0.1);
+        // the final point is always a forced zero marker; the point just
+        // before it carries the ramp's actual end-of-replay value
+        let last = pts.last().unwrap();
+        assert_eq!(last.dt_ms, 100);
+        assert_eq!(last.intensity, 0.0);
+        let end_value = &pts[pts.len() - 2];
+        assert_eq!(end_value.dt_ms, 100);
+        assert!(end_value.intensity > 0.9);
+    }
+
+    #[test]
+    fn ramp_zero_length_still_terminates() {
+        let e = ramp_effect(0x7FFF, 0, 0);
+        let pts = translate(&e);
+        assert_eq!(pts.len(), 2);
+        assert_eq!(pts[0].dt_ms, 0);
+        assert!(pts[0].intensity > 0.9);
+        assert_eq!(pts[1].dt_ms, 0);
+        assert_eq!(pts[1].intensity, 0.0);
+    }
+
     // ── unknown type ──
 
     #[test]
@@ -281,5 +380,12 @@ mod tests {
                            trigger_button: 0, trigger_interval: 0,
                            replay_length: 100, replay_delay: 0, u: [0; 7] };
         assert!(translate(&e).is_empty());
+    }
+
+    // ── regression: FF_RAMP must not collide with an FF_PERIODIC waveform code ──
+
+    #[test]
+    fn ff_ramp_const_is_not_ff_square_waveform() {
+        assert_ne!(FF_RAMP, Waveform::Square as u16);
     }
 }
