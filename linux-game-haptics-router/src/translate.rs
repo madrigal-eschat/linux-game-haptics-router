@@ -1,5 +1,5 @@
 use core::f32::consts::PI;
-use haptics_probe_common::{
+use linux_game_haptics_router_common::{
     Envelope, FfEffect, Waveform, FF_CONSTANT, FF_PERIODIC, FF_RAMP, FF_RUMBLE,
 };
 
@@ -197,7 +197,7 @@ fn sample_range_fn<F: Fn(u32) -> f32>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use haptics_probe_common::FF_RUMBLE;
+    use linux_game_haptics_router_common::FF_RUMBLE;
 
     fn rumble_effect(strong: u16, weak: u16, length_ms: u16) -> FfEffect {
         let mut e = FfEffect {

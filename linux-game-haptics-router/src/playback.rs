@@ -44,7 +44,7 @@ impl Playback {
         let mut delay = Duration::from_millis(500);
         const MAX_DELAY: Duration = Duration::from_secs(5);
         let client = loop {
-            let c = ButtplugClient::new("haptics-probe");
+            let c = ButtplugClient::new("game-haptics-router");
             let transport = ButtplugWebsocketClientTransport::new_insecure_connector(ws_url);
             let connector: buttplug::connector::ButtplugRemoteClientConnector<
                 ButtplugWebsocketClientTransport,

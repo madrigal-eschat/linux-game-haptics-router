@@ -32,13 +32,13 @@ repos:
 
       - id: cargo-check
         name: cargo check
-        # --exclude haptics-probe-ebpf: it's #![no_std]#![no_main] with its
+        # --exclude linux-game-haptics-router-ebpf: it's #![no_std]#![no_main] with its
         # own #[panic_handler] and can only build correctly through
         # aya-build's bpfel-unknown-none cross-compile (invoked from
-        # haptics-probe's build.rs, which still runs regardless of this
+        # linux-game-haptics-router's build.rs, which still runs regardless of this
         # exclude). Building it directly for the host target links std and
         # collides with its panic_handler (E0152 duplicate lang item).
-        entry: cargo check --workspace --exclude haptics-probe-ebpf
+        entry: cargo check --workspace --exclude linux-game-haptics-router-ebpf
         language: system
         types: [rust]
         pass_filenames: false
@@ -47,7 +47,7 @@ repos:
         name: cargo clippy
         # same E0152 reasoning as cargo-check above, plus --all-targets
         # would additionally try to build a --test harness for every member.
-        entry: cargo clippy --workspace --exclude haptics-probe-ebpf --all-targets -- -D warnings
+        entry: cargo clippy --workspace --exclude linux-game-haptics-router-ebpf --all-targets -- -D warnings
         language: system
         types: [rust]
         pass_filenames: false

@@ -1,0 +1,13 @@
+[package]
+name = "linux-game-haptics-router-ebpf"
+version = "0.1.1"
+edition = "2021"
+
+[dependencies]
+aya-ebpf = "0.2"
+aya-log-ebpf = "0.2"
+linux-game-haptics-router-common = { path = "../linux-game-haptics-router-common" }
+
+[[bin]]
+name = "linux-game-haptics-router-ebpf"
+path = "src/main.rs"

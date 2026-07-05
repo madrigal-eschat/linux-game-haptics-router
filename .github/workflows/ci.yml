@@ -17,17 +17,17 @@ jobs:
       - uses: ./.github/actions/rust-bpf-setup
       - run: cargo fmt --all -- --check
 
-  # haptics-probe-ebpf is excluded from every command below except the real
-  # `build` of haptics-probe itself. It's #![no_std]#![no_main] with its own
+  # linux-game-haptics-router-ebpf is excluded from every command below except the real
+  # `build` of linux-game-haptics-router itself. It's #![no_std]#![no_main] with its own
   # #[panic_handler] and can only be compiled correctly through aya-build's
-  # bpfel-unknown-none cross-compile (invoked from haptics-probe's build.rs).
+  # bpfel-unknown-none cross-compile (invoked from linux-game-haptics-router's build.rs).
   # Building/checking/testing it directly as a normal workspace member for a
   # real target (x86_64/aarch64-unknown-linux-gnu) links std, which collides
   # with its panic_handler (E0152 duplicate lang item `panic_impl`) — that
   # collision doesn't need --tests/--all-targets to trigger, plain `cargo
   # check`/`build` hit it too. Excluding it here loses no coverage: the real
-  # cross-compiled bytecode still gets produced by haptics-probe's build.rs
-  # regardless of whether haptics-probe-ebpf is also a top-level unit of the
+  # cross-compiled bytecode still gets produced by linux-game-haptics-router's build.rs
+  # regardless of whether linux-game-haptics-router-ebpf is also a top-level unit of the
   # outer cargo invocation.
   check:
     runs-on: ubuntu-latest
@@ -39,7 +39,7 @@ jobs:
       - uses: ./.github/actions/rust-bpf-setup
         with:
           target: ${{ matrix.target }}
-      - run: cargo check --workspace --exclude haptics-probe-ebpf --target ${{ matrix.target }}
+      - run: cargo check --workspace --exclude linux-game-haptics-router-ebpf --target ${{ matrix.target }}
 
   clippy:
     runs-on: ubuntu-latest
@@ -51,7 +51,7 @@ jobs:
       - uses: ./.github/actions/rust-bpf-setup
         with:
           target: ${{ matrix.target }}
-      - run: cargo clippy --workspace --exclude haptics-probe-ebpf --all-targets --target ${{ matrix.target }} -- -D warnings
+      - run: cargo clippy --workspace --exclude linux-game-haptics-router-ebpf --all-targets --target ${{ matrix.target }} -- -D warnings
 
   # aarch64 binaries can't execute on the x86_64 runner, so tests only run
   # natively; the aarch64 target is still exercised by check/clippy/build.
@@ -60,7 +60,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/rust-bpf-setup
-      - run: cargo test --workspace --exclude haptics-probe-ebpf
+      - run: cargo test --workspace --exclude linux-game-haptics-router-ebpf
 
   build:
     runs-on: ubuntu-latest
@@ -72,13 +72,13 @@ jobs:
       - uses: ./.github/actions/rust-bpf-setup
         with:
           target: ${{ matrix.target }}
-      - run: cargo build --workspace --exclude haptics-probe-ebpf --release --target ${{ matrix.target }}
+      - run: cargo build --workspace --exclude linux-game-haptics-router-ebpf --release --target ${{ matrix.target }}
 
   coverage:
     runs-on: ubuntu-latest
     # cargo-llvm-cov's -C instrument-coverage flags leak into the nested
     # nightly build aya-build shells out to for the real bpfel-unknown-none
-    # cross-compile (haptics-probe's build.rs), and profiler_builtins isn't
+    # cross-compile (linux-game-haptics-router's build.rs), and profiler_builtins isn't
     # available for that build-std=core/custom-target combo (E0463). Skip
     # the real eBPF cross-compile for coverage runs — see build.rs; coverage
     # never loads the resulting bytes, it just needs the include_bytes_aligned!
@@ -89,7 +89,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/rust-bpf-setup
       - uses: taiki-e/install-action@cargo-llvm-cov
-      - run: cargo llvm-cov --workspace --exclude haptics-probe-ebpf --lcov --output-path lcov.info
+      - run: cargo llvm-cov --workspace --exclude linux-game-haptics-router-ebpf --lcov --output-path lcov.info
       - uses: codecov/codecov-action@v4
         with:
           files: lcov.info

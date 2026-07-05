@@ -6,7 +6,7 @@ use aya_ebpf::helpers::bpf_probe_read_user_buf;
 use aya_ebpf::macros::map;
 use aya_ebpf::macros::tracepoint;
 use aya_ebpf::programs::TracePointContext;
-use haptics_probe_common::{eviocsff_nr, EnterScratch, FfEffect, ProbeEvent};
+use linux_game_haptics_router_common::{eviocsff_nr, EnterScratch, FfEffect, ProbeEvent};
 
 /// Per-thread scratch: tgid<<32|pid → EnterScratch.
 /// LRU because a killed/aborted thread never reaches sys_exit_ioctl to
@@ -42,7 +42,12 @@ fn try_enter(ctx: &TracePointContext) -> Result<(), i64> {
     if cmd as u32 != eviocsff_nr() {
         return Ok(());
     }
-    unsafe { bpf_printk!(c"haptics-probe: EVIOCSFF cmd matched (0x%x)", cmd as u32) };
+    unsafe {
+        bpf_printk!(
+            c"game-haptics-router: EVIOCSFF cmd matched (0x%x)",
+            cmd as u32
+        )
+    };
 
     let arg: u64 = unsafe { ctx.read_at(32).map_err(|_| 0i64)? };
 
@@ -61,7 +66,7 @@ fn try_enter(ctx: &TracePointContext) -> Result<(), i64> {
     if let Err(e) = unsafe { bpf_probe_read_user_buf(arg as *const u8, &mut raw) } {
         unsafe {
             bpf_printk!(
-                c"haptics-probe: probe_read_user_buf FAILED arg=0x%lx err=%d",
+                c"game-haptics-router: probe_read_user_buf FAILED arg=0x%lx err=%d",
                 arg,
                 e as i64
             )
@@ -102,7 +107,7 @@ fn try_enter(ctx: &TracePointContext) -> Result<(), i64> {
     }
     unsafe {
         bpf_printk!(
-            c"haptics-probe: ENTER_SCRATCH stored, kind=%d replay_length=%d",
+            c"game-haptics-router: ENTER_SCRATCH stored, kind=%d replay_length=%d",
             effect.kind as i64,
             effect.replay_length as i64
         )
@@ -132,7 +137,7 @@ fn try_exit(ctx: &TracePointContext) -> Result<(), i64> {
     {
         unsafe {
             bpf_printk!(
-                c"haptics-probe: exit probe_read_user_buf(id) FAILED err=%d",
+                c"game-haptics-router: exit probe_read_user_buf(id) FAILED err=%d",
                 e as i64
             )
         };
@@ -153,7 +158,7 @@ fn try_exit(ctx: &TracePointContext) -> Result<(), i64> {
     };
     unsafe {
         bpf_printk!(
-            c"haptics-probe: EFFECT_STORE inserted tgid=%d effect_id=%d",
+            c"game-haptics-router: EFFECT_STORE inserted tgid=%d effect_id=%d",
             tgid as i64,
             effect_id as i64
         )
