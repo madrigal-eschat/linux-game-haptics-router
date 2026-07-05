@@ -21,6 +21,15 @@ runs:
       with:
         components: rust-src
 
+    # dtolnay/rust-toolchain makes whichever toolchain it installs last the
+    # rustup default — without this, nightly (installed second, missing
+    # clippy/rustfmt and any --target we added to stable) silently becomes
+    # what every plain `cargo` invocation runs under. aya-build finds nightly
+    # by name internally, so ambient default only needs to be stable.
+    - name: Make stable the default toolchain
+      shell: bash
+      run: rustup default stable
+
     - name: Cache cargo/target
       uses: Swatinem/rust-cache@v2
       with:

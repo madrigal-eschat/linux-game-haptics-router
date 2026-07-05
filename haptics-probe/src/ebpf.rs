@@ -50,13 +50,16 @@ pub async fn load_probe() -> Result<(Ebpf, mpsc::Receiver<EffectUploaded>)> {
             let ring = guard.get_inner_mut();
             while let Some(item) = ring.next() {
                 let bytes: &[u8] = &item;
-                if bytes.len() < std::mem::size_of::<ProbeEvent>() { continue; }
-                let event: ProbeEvent = unsafe {
-                    std::ptr::read_unaligned(bytes.as_ptr() as *const ProbeEvent)
-                };
+                if bytes.len() < std::mem::size_of::<ProbeEvent>() {
+                    continue;
+                }
+                let event: ProbeEvent =
+                    unsafe { std::ptr::read_unaligned(bytes.as_ptr() as *const ProbeEvent) };
                 log::info!(
                     "ring buffer: effect uploaded tgid={} effect_id={} kind={}",
-                    event.tgid, event.effect_id, event.effect.kind
+                    event.tgid,
+                    event.effect_id,
+                    event.effect.kind
                 );
                 let _ = tx.try_send(EffectUploaded {
                     tgid: event.tgid,
