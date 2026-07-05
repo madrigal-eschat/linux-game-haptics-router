@@ -34,8 +34,10 @@ CI/dev host
     2. fetch/cache a minimal cloud image (e.g. Ubuntu 24.04 cloud img), keep
        it read-only; boot from a throwaway qcow2 overlay on top of it
     3. write a cloud-init seed (SSH pubkey, passwordless sudo for test user)
-    4. boot: qemu-system-x86_64 -enable-kvm ... (background), trap kills it
-       and cleans temp files on any exit path
+    4. boot: qemu-system-$(uname -m) -enable-kvm ... (background) — VM arch
+       always matches host arch (no cross-arch emulation), so this only ever
+       runs KVM-accelerated. trap kills it and cleans temp files on any exit
+       path
     5. poll SSH until reachable (bounded retry, overall timeout)
     6. scp the daemon binary + e2e-tests binary into the VM
     7. timeout <N> ssh -t vmuser 'sudo ./e2e-tests' — capture stdout,
@@ -106,14 +108,22 @@ skew to account for.
 
 ## CI wiring
 
-- New job in `.github/workflows/ci.yml`, `runs-on: ubuntu-latest` (GitHub
-  Actions Ubuntu runners have `/dev/kvm` available for nested virtualization
-  as of current runner images — confirm this holds at implementation time).
-  Builds release binaries via existing build steps, then runs
-  `e2e/run.sh`, with a job-level `timeout-minutes` as a second backstop
-  above the in-script SSH timeout.
-- Local dev: identical `e2e/run.sh` invocation, no CI-specific branching
-  beyond where the base cloud image is cached.
+- New job in `.github/workflows/ci.yml`, matrixed over host arch so the VM
+  arch always matches the runner arch (no cross-arch/TCG emulation):
+  - `runs-on: ubuntu-latest` (x86_64)
+  - `runs-on: ubuntu-24.04-arm` (aarch64)
+  Both runner families expose `/dev/kvm` for nested virtualization on
+  current GitHub-hosted images — confirm this still holds at implementation
+  time, particularly for the arm runner. `run.sh` picks the matching cloud
+  image + qemu binary (`qemu-system-x86_64` / `qemu-system-aarch64`) based
+  on `uname -m`, mirroring the `target` matrix already in
+  `build-release.yml`.
+  Each matrix leg builds its own release binaries via existing build steps,
+  then runs `e2e/run.sh`, with a job-level `timeout-minutes` as a second
+  backstop above the in-script SSH timeout.
+- Local dev: identical `e2e/run.sh` invocation on whatever arch the
+  developer is on, no CI-specific branching beyond where the base cloud
+  image is cached.
 
 ## Error handling / teardown
 
