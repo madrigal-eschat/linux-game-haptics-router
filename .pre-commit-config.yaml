@@ -39,7 +39,11 @@ repos:
 
       - id: cargo-clippy
         name: cargo clippy
-        entry: cargo clippy --workspace --all-targets -- -D warnings
+        # --exclude haptics-probe-ebpf: --all-targets builds a --test harness
+        # for every member, which links std. haptics-probe-ebpf is
+        # #![no_std]#![no_main] with its own #[panic_handler], which
+        # conflicts with std's (E0152 duplicate lang item).
+        entry: cargo clippy --workspace --exclude haptics-probe-ebpf --all-targets -- -D warnings
         language: system
         types: [rust]
         pass_filenames: false
