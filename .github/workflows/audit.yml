@@ -1,0 +1,19 @@
+name: Security audit
+
+on:
+  push:
+    branches: [main]
+    paths: ['**/Cargo.toml', '**/Cargo.lock']
+  pull_request:
+    paths: ['**/Cargo.toml', '**/Cargo.lock']
+  schedule:
+    - cron: '0 6 * * 1' # weekly, catches newly-disclosed advisories
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: rustsec/audit-check@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}

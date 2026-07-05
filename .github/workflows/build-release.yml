@@ -1,0 +1,45 @@
+name: Build release binaries
+
+# Triggered by the tag semantic-release creates (release.yml). Builds each
+# required target in release mode, packages the binary, and attaches it to
+# the GitHub Release that already exists for this tag.
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu]
+        include:
+          - target: x86_64-unknown-linux-gnu
+            arch: linux-amd64
+          - target: aarch64-unknown-linux-gnu
+            arch: linux-aarch64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rust-bpf-setup
+        with:
+          target: ${{ matrix.target }}
+
+      - run: cargo build --workspace --release --target ${{ matrix.target }}
+
+      - name: Package
+        run: |
+          pkg=haptics-probe-${{ github.ref_name }}-${{ matrix.arch }}
+          mkdir -p "$pkg"
+          cp target/${{ matrix.target }}/release/haptics-probe "$pkg/"
+          tar czf "$pkg.tar.gz" "$pkg"
+          sha256sum "$pkg.tar.gz" > "$pkg.tar.gz.sha256"
+
+      - name: Attach to GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            haptics-probe-${{ github.ref_name }}-${{ matrix.arch }}.tar.gz
+            haptics-probe-${{ github.ref_name }}-${{ matrix.arch }}.tar.gz.sha256

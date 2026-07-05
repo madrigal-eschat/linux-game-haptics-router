@@ -1,0 +1,39 @@
+name: Set up Rust + aya eBPF toolchain
+description: >
+  Installs the stable + nightly Rust toolchains, rustup targets, bpf-linker,
+  and (for aarch64) the cross linker needed to build this workspace.
+inputs:
+  target:
+    description: Rust target triple to build the userspace crate for
+    required: true
+    default: x86_64-unknown-linux-gnu
+runs:
+  using: composite
+  steps:
+    - name: Install stable toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ inputs.target }}
+        components: clippy, rustfmt
+
+    - name: Install nightly toolchain (needed by aya-build for the eBPF program)
+      uses: dtolnay/rust-toolchain@nightly
+      with:
+        components: rust-src
+
+    - name: Cache cargo/target
+      uses: Swatinem/rust-cache@v2
+      with:
+        key: ${{ inputs.target }}
+
+    - name: Install bpf-linker
+      shell: bash
+      run: cargo install bpf-linker --locked
+
+    - name: Install aarch64 cross linker
+      if: inputs.target == 'aarch64-unknown-linux-gnu'
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y gcc-aarch64-linux-gnu
+        echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"

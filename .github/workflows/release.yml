@@ -1,0 +1,47 @@
+name: Release
+
+# Runs semantic-release on every push to main. It inspects commits since the
+# last tag, and if any warrant a release, bumps every crate's Cargo.toml via
+# cargo-edit, updates CHANGELOG.md, commits, tags (vX.Y.Z), and publishes a
+# GitHub Release with generated notes. Tagging that release is what triggers
+# build-release.yml to attach platform binaries to it.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo install cargo-edit --locked
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - run: |
+          npm install --no-save \
+            semantic-release@23 \
+            @semantic-release/changelog@6 \
+            @semantic-release/exec@6 \
+            @semantic-release/git@10 \
+            conventional-changelog-conventionalcommits@7
+
+      - run: npx semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

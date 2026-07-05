@@ -1,0 +1,23 @@
+{
+  "branches": ["main"],
+  "plugins": [
+    ["@semantic-release/commit-analyzer", { "preset": "conventionalcommits" }],
+    ["@semantic-release/release-notes-generator", { "preset": "conventionalcommits" }],
+    ["@semantic-release/changelog", { "changelogFile": "CHANGELOG.md" }],
+    ["@semantic-release/exec", {
+      "prepareCmd": "cargo set-version --workspace ${nextRelease.version}"
+    }],
+    ["@semantic-release/git", {
+      "assets": [
+        "CHANGELOG.md",
+        "Cargo.lock",
+        "Cargo.toml",
+        "haptics-probe/Cargo.toml",
+        "haptics-probe-common/Cargo.toml",
+        "haptics-probe-ebpf/Cargo.toml"
+      ],
+      "message": "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
+    }],
+    "@semantic-release/github"
+  ]
+}

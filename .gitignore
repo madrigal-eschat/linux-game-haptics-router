@@ -1,0 +1,17 @@
+/target
+**/target
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+
+# semantic-release / node tooling
+node_modules/
+npm-debug.log*
+
+# packaged release artifacts built locally
+*.tar.gz
+*.sha256
