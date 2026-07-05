@@ -22,7 +22,7 @@ jobs:
           - target: aarch64-unknown-linux-gnu
             arch: linux-aarch64
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/rust-bpf-setup
         with:
           target: ${{ matrix.target }}
