@@ -2,8 +2,8 @@ mod app;
 mod device;
 mod ebpf;
 mod playback;
-mod translate;
 mod throttle;
+mod translate;
 
 use anyhow::Result;
 use app::App;
@@ -50,7 +50,9 @@ async fn main() -> Result<()> {
 
     // Connect to the buttplug/intiface engine ourselves — playback lives
     // entirely in this process now, Python just supplies config.
-    let ws_url = args.ws_url.expect("clap requires --ws-url unless --list-devices");
+    let ws_url = args
+        .ws_url
+        .expect("clap requires --ws-url unless --list-devices");
     let playback = Playback::connect_with_retry(&ws_url, args.scale, args.device_map).await?;
 
     // Live scale updates from Python arrive as JSON lines on stdin, e.g.
@@ -133,8 +135,8 @@ mod tests {
 
     #[test]
     fn ws_url_accepted_and_defaults_applied() {
-        let args = Args::try_parse_from(["haptics-probe", "--ws-url", "ws://localhost:12345"])
-            .unwrap();
+        let args =
+            Args::try_parse_from(["haptics-probe", "--ws-url", "ws://localhost:12345"]).unwrap();
         assert_eq!(args.ws_url.as_deref(), Some("ws://localhost:12345"));
         assert_eq!(args.scale, 1.0);
         assert!(args.device_map.is_empty());

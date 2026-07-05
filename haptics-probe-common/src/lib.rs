@@ -9,12 +9,12 @@
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(u16)]
 pub enum Waveform {
-    Square    = 0x58,
-    Triangle  = 0x59,
-    Sine      = 0x5a,
-    SawUp     = 0x5b,
-    SawDown   = 0x5c,
-    Custom    = 0x5d,
+    Square = 0x58,
+    Triangle = 0x59,
+    Sine = 0x5a,
+    SawUp = 0x5b,
+    SawDown = 0x5c,
+    Custom = 0x5d,
 }
 
 impl Waveform {
@@ -26,7 +26,7 @@ impl Waveform {
             0x5b => Some(Self::SawUp),
             0x5c => Some(Self::SawDown),
             0x5d => Some(Self::Custom),
-            _    => None,
+            _ => None,
         }
     }
 }
@@ -36,40 +36,40 @@ impl Waveform {
 #[repr(C)]
 pub struct Envelope {
     pub attack_length: u16,
-    pub attack_level:  u16,
-    pub fade_length:   u16,
-    pub fade_level:    u16,
+    pub attack_level: u16,
+    pub fade_length: u16,
+    pub fade_level: u16,
 }
 
 /// Captured effect data — stored in eBPF map, read by userspace
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct FfEffect {
-    pub kind:      u16,
-    pub id:        i16,
+    pub kind: u16,
+    pub id: i16,
     pub direction: u16,
     // trigger (4 bytes)
-    pub trigger_button:   u16,
+    pub trigger_button: u16,
     pub trigger_interval: u16,
     // replay (4 bytes)
     pub replay_length: u16,
-    pub replay_delay:  u16,
+    pub replay_delay: u16,
     // union — largest variant is periodic (14 bytes)
-    pub u: [u16; 7],  // raw union bytes as u16 words
+    pub u: [u16; 7], // raw union bytes as u16 words
 }
 
 // FF type constants
-pub const FF_RUMBLE:   u16 = 0x50;
+pub const FF_RUMBLE: u16 = 0x50;
 pub const FF_PERIODIC: u16 = 0x51;
 pub const FF_CONSTANT: u16 = 0x52;
-pub const FF_RAMP:     u16 = 0x57;
+pub const FF_RAMP: u16 = 0x57;
 
 /// Scratch entry: saved pointer + effect bytes before the kernel writes back the id.
 /// Stored per-thread (keyed by tgid<<32|pid) from enter until exit.
 #[derive(Clone, Copy)]
 #[repr(C)]
 pub struct EnterScratch {
-    pub ff_effect_ptr: u64,  // userspace pointer passed to EVIOCSFF
+    pub ff_effect_ptr: u64, // userspace pointer passed to EVIOCSFF
     pub effect: FfEffect,
 }
 

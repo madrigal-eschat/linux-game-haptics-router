@@ -7,7 +7,9 @@ pub struct Throttle {
 }
 
 impl Throttle {
-    pub fn new() -> Self { Self { last_haptic: None } }
+    pub fn new() -> Self {
+        Self { last_haptic: None }
+    }
 
     pub fn should_emit_haptic(&mut self) -> bool {
         match self.last_haptic {
