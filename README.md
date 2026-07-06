@@ -64,13 +64,15 @@ echo '{"scale": 0.5}' | sudo tee /proc/$(pgrep game-haptics-router)/fd/0
 
 - Only detects **evdev** force-feedback devices — anything a game drives
   through a different haptics path (e.g. DualSense adaptive triggers/haptics
-  over its non-evdev HID report, or a game talking to a toy/engine directly)
-  is invisible to this tool.
+  over its non-evdev HID report, or some kind of libusb-based 
+  direct-to-controller communication) is invisible to this tool.
+  Adding support for additional feedback detection isn't _out_ of scope, but
+  it's also not currently a priority.
 - Must be started **before** the game launches. The eBPF probe only sees
   `EVIOCSFF` calls that happen after it attaches — effects uploaded to a
   device before `game-haptics-router` is running are missed until the game
   re-uploads them (e.g. on a restart).
-- No per-game or per-controller filtering yet — every FF-capable evdev device
+- No per-game or per-controller filtering **yet** — every FF-capable evdev device
   found on the system gets routed, and all captured effects across every
   process are translated and played. If you have multiple FF devices or games
   running at once, they'll all drive your toys.
