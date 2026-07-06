@@ -136,3 +136,51 @@ pub struct ProbeEvent {
     pub _pad: u16,
     pub effect: FfEffect,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn waveform_from_u16_round_trips_known_values() {
+        assert_eq!(Waveform::from_u16(0x58), Some(Waveform::Square));
+        assert_eq!(Waveform::from_u16(0x59), Some(Waveform::Triangle));
+        assert_eq!(Waveform::from_u16(0x5a), Some(Waveform::Sine));
+        assert_eq!(Waveform::from_u16(0x5b), Some(Waveform::SawUp));
+        assert_eq!(Waveform::from_u16(0x5c), Some(Waveform::SawDown));
+        assert_eq!(Waveform::from_u16(0x5d), Some(Waveform::Custom));
+    }
+
+    #[test]
+    fn waveform_from_u16_rejects_unknown_values() {
+        assert_eq!(Waveform::from_u16(0), None);
+        assert_eq!(Waveform::from_u16(0x57), None); // FF_RAMP, not a waveform
+        assert_eq!(Waveform::from_u16(0x5e), None);
+        assert_eq!(Waveform::from_u16(u16::MAX), None);
+    }
+
+    #[test]
+    fn envelope_default_is_zeroed() {
+        let e = Envelope::default();
+        assert_eq!(e.attack_length, 0);
+        assert_eq!(e.attack_level, 0);
+        assert_eq!(e.fade_length, 0);
+        assert_eq!(e.fade_level, 0);
+    }
+
+    // Verified against a live strace of a game issuing EVIOCSFF: real value
+    // is 0x40304580 for a 48-byte struct ff_effect (see KERNEL_FF_EFFECT_SIZE
+    // doc comment) — this pins that against regressions in the bit-packing.
+    #[test]
+    fn eviocsff_nr_matches_strace_verified_value() {
+        assert_eq!(eviocsff_nr(), 0x4030_4580);
+    }
+
+    #[test]
+    fn ff_type_constants_match_linux_uapi_input_event_codes_h() {
+        assert_eq!(FF_RUMBLE, 0x50);
+        assert_eq!(FF_PERIODIC, 0x51);
+        assert_eq!(FF_CONSTANT, 0x52);
+        assert_eq!(FF_RAMP, 0x57);
+    }
+}
