@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use evdev::{Device, FFEffectData, FFEffectKind, FFReplay, FFTrigger};
+use evdev::{Device, EventType, FFEffectData, FFEffectKind, FFReplay, FFTrigger, InputEvent};
 use linux_game_haptics_router_e2e::gamepad::spawn_fake_gamepad;
 use linux_game_haptics_router_e2e::protocol_server::{spawn_fake_server, ReceivedCommand};
 use linux_game_haptics_router_e2e::scenarios::smoke_scenarios;
@@ -110,6 +110,20 @@ where
     (buf, handle)
 }
 
+/// `evdev` 0.12.2's `FFEffect::play()`/`stop()` write only the bare `EV_FF`
+/// event, with no trailing `SYN_REPORT`. Per the kernel's per-event-type
+/// input disposition table, `EV_FF` *is* broadcast to every other evdev
+/// reader of the device (not just the driver) — but only once a
+/// flush-tagged event (a `SYN_REPORT`) follows; until then it just sits
+/// buffered at the device level. Without this, no third-party reader (like
+/// the real daemon under test) ever observes the play/stop write at all.
+/// Write it via `dev` (a separate, still-open handle to the same device
+/// node) — the kernel's per-device event buffer is shared across every open
+/// fd, so a SYN_REPORT from any of them flushes what any other one wrote.
+fn syn_report(dev: &mut Device) -> std::io::Result<()> {
+    dev.send_events(&[InputEvent::new(EventType::SYNCHRONIZATION, 0, 0)])
+}
+
 fn device_id_for(path: &std::path::Path) -> Result<String> {
     let dev = Device::open(path).context("opening virtual gamepad to derive its device_id")?;
     Ok(dev
@@ -185,7 +199,7 @@ async fn main() -> Result<()> {
             }
         };
         let issued_at = Instant::now();
-        if let Err(e) = effect.play(1) {
+        if let Err(e) = effect.play(1).and_then(|()| syn_report(&mut game_dev)) {
             failures.push(format!("{}: play failed: {}", scenario.name, e));
             continue;
         }
@@ -227,12 +241,12 @@ async fn main() -> Result<()> {
         // test, not a harness bug.
         match game_dev.upload_ff_effect(rumble_effect(300)) {
             Ok(mut effect) => {
-                if let Err(e) = effect.play(1) {
+                if let Err(e) = effect.play(1).and_then(|()| syn_report(&mut game_dev)) {
                     failures.push(format!("{}: first play failed: {}", name, e));
                 } else {
                     tokio::time::sleep(Duration::from_millis(5)).await;
                     let second_issue = Instant::now();
-                    if let Err(e) = effect.play(1) {
+                    if let Err(e) = effect.play(1).and_then(|()| syn_report(&mut game_dev)) {
                         failures.push(format!("{}: second play failed: {}", name, e));
                     } else {
                         let deadline = second_issue + LATENCY_BOUND + Duration::from_millis(500);
@@ -278,7 +292,7 @@ async fn main() -> Result<()> {
                 match game_dev.upload_ff_effect(rumble_effect(200)) {
                     Ok(mut effect) => {
                         let issued_at = Instant::now();
-                        if let Err(e) = effect.play(1) {
+                        if let Err(e) = effect.play(1).and_then(|()| syn_report(&mut game_dev)) {
                             failures.push(format!("{} (gamepad A): play failed: {}", name, e));
                             scenario_failed = true;
                         } else {
@@ -303,7 +317,7 @@ async fn main() -> Result<()> {
                 // fake server never advertises — nothing should arrive.
                 match game_dev_b.upload_ff_effect(rumble_effect(200)) {
                     Ok(mut effect) => {
-                        if let Err(e) = effect.play(1) {
+                        if let Err(e) = effect.play(1).and_then(|()| syn_report(&mut game_dev_b)) {
                             failures.push(format!("{} (gamepad B): play failed: {}", name, e));
                             scenario_failed = true;
                         } else {
