@@ -8,4 +8,4 @@ default = []
 user = ["bson"]
 
 [dependencies]
-bson = { version = "2", optional = true }
+bson = { version = "3", optional = true }
