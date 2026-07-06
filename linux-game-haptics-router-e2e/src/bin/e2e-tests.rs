@@ -7,6 +7,7 @@ use linux_game_haptics_router_e2e::timing::{
     assert_command_within_bound, assert_final_zero_within_bound, expected_end_time, LATENCY_BOUND,
 };
 use std::process::{Child, Command, Stdio};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc::UnboundedReceiver;
 
@@ -73,6 +74,42 @@ fn spawn_daemon(ws_url: &str, device_map_json: &str) -> Result<Child> {
         .context("failed to spawn ./game-haptics-router — did run.sh scp it into the cwd?")
 }
 
+/// Spawns a background thread that reads `pipe` to completion (EOF, i.e. the
+/// daemon exiting/closing the fd), accumulating everything into the returned
+/// `Arc<Mutex<String>>`. Used for both the daemon's stdout and stderr so
+/// neither pipe ever fills up while scenarios are running: `env_logger` at
+/// the daemon's default `info` level is verbose (every effect upload, every
+/// FF event, a full per-schedule keyframe dump from
+/// `playback::format_schedule_log`), and across the whole run the volume on
+/// stderr in particular can approach the OS pipe buffer size. If nothing
+/// drains a full pipe, the daemon blocks inside its own `write()` call,
+/// stalling the process under test and corrupting the very timing
+/// assertions this harness exists to make.
+fn spawn_pipe_drain<R>(pipe: R) -> (Arc<Mutex<String>>, std::thread::JoinHandle<()>)
+where
+    R: std::io::Read + Send + 'static,
+{
+    let buf = Arc::new(Mutex::new(String::new()));
+    let buf_writer = Arc::clone(&buf);
+    let handle = std::thread::spawn(move || {
+        use std::io::{BufRead, BufReader};
+        let mut reader = BufReader::new(pipe);
+        let mut line = String::new();
+        loop {
+            line.clear();
+            match reader.read_line(&mut line) {
+                Ok(0) => break,
+                Ok(_) => {
+                    let mut guard = buf_writer.lock().unwrap();
+                    guard.push_str(&line);
+                }
+                Err(_) => break,
+            }
+        }
+    });
+    (buf, handle)
+}
+
 fn device_id_for(path: &std::path::Path) -> Result<String> {
     let dev = Device::open(path).context("opening virtual gamepad to derive its device_id")?;
     Ok(dev
@@ -102,7 +139,16 @@ async fn main() -> Result<()> {
     let device_id_b = device_id_for(&gamepad_b.device_node)?;
 
     let device_map_json = format!(r#"{{"{}": null, "{}": [99]}}"#, device_id, device_id_b);
-    let daemon_child = spawn_daemon(&ws_url, &device_map_json)?;
+    let mut daemon_child = spawn_daemon(&ws_url, &device_map_json)?;
+    // Drain stdout/stderr concurrently for the daemon's whole lifetime (see
+    // `spawn_pipe_drain`'s doc comment) rather than reading them once at the
+    // end — otherwise a filled pipe buffer stalls the daemon mid-scenario.
+    // `spawn_daemon` always requests `Stdio::piped()` for both, so these
+    // `.take()`s are expected to succeed.
+    let (daemon_stdout, stdout_drain) =
+        spawn_pipe_drain(daemon_child.stdout.take().context("daemon stdout not piped")?);
+    let (daemon_stderr, stderr_drain) =
+        spawn_pipe_drain(daemon_child.stderr.take().context("daemon stderr not piped")?);
     let mut daemon = DaemonGuard(daemon_child);
     // The daemon connects to the fake server, then opens the evdev device
     // and starts reading FF events — give it a moment before issuing gestures.
@@ -114,6 +160,15 @@ async fn main() -> Result<()> {
     let mut failures = Vec::new();
 
     for scenario in smoke_scenarios() {
+        // NB: `upload_ff_effect` below reaches the daemon's effect table via
+        // the eBPF ring-buffer path, while the `play()` call a few lines down
+        // reaches it via a separate evdev-reader channel — there's no
+        // ordering guarantee between the two. If `Play` were somehow
+        // serviced first, the daemon would log "no matching effect in store"
+        // and silently drop it. In practice the eBPF path is fast enough
+        // that this hasn't been observed to flake, and it's an inherent
+        // property of the two-channel design under test here, not a harness
+        // bug — not something to paper over with a retry/sleep.
         let mut effect = match game_dev.upload_ff_effect(scenario.effect) {
             Ok(e) => e,
             Err(e) => {
@@ -158,6 +213,10 @@ async fn main() -> Result<()> {
     // issue necessarily beats it relative to the second too).
     {
         let name = "rapid_retrigger";
+        // See the same-named note in the smoke-scenarios loop above: upload
+        // and play race across two independent daemon-side channels
+        // (eBPF ring buffer vs. evdev reader). Inherent to the design under
+        // test, not a harness bug.
         match game_dev.upload_ff_effect(rumble_effect(300)) {
             Ok(mut effect) => {
                 if let Err(e) = effect.play(1) {
@@ -206,6 +265,8 @@ async fn main() -> Result<()> {
         match Device::open(&gamepad_b.device_node) {
             Ok(mut game_dev_b) => {
                 // Gamepad A: broadcast-mapped, should produce a command.
+                // (Same upload-vs-play race noted above applies to every
+                // upload_ff_effect call in this file — inherent, not a bug.)
                 match game_dev.upload_ff_effect(rumble_effect(200)) {
                     Ok(mut effect) => {
                         let issued_at = Instant::now();
@@ -274,14 +335,21 @@ async fn main() -> Result<()> {
         }
     }
 
+    // Kill+wait explicitly here (rather than just letting `daemon` drop) so
+    // the daemon has actually exited and flushed its output before we read
+    // the drain threads' accumulated buffers below — `DaemonGuard`'s own
+    // `Drop` will run its own kill()/wait() afterwards when `daemon` goes out
+    // of scope, but by then the child is already reaped, so that second
+    // kill()/wait() is a harmless no-op, not a bug.
     let _ = daemon.0.kill();
     let _ = daemon.0.wait();
-    if let Some(stdout) = daemon.0.stdout.take() {
-        use std::io::Read;
-        let mut s = String::new();
-        let _ = std::io::BufReader::new(stdout).read_to_string(&mut s);
-        log::info!("daemon stdout:\n{}", s);
-    }
+    // Join the drain threads so they've observed EOF on both pipes (the
+    // daemon having exited above guarantees that EOF is imminent) before we
+    // read out everything they've accumulated.
+    let _ = stdout_drain.join();
+    let _ = stderr_drain.join();
+    log::info!("daemon stdout:\n{}", daemon_stdout.lock().unwrap());
+    log::info!("daemon stderr:\n{}", daemon_stderr.lock().unwrap());
 
     if failures.is_empty() {
         println!("all scenarios passed");
