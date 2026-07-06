@@ -95,3 +95,17 @@ jobs:
           files: lcov.info
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
+
+  e2e:
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-latest
+          - runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rust-bpf-setup
+      - run: sudo apt-get update && sudo apt-get install -y qemu-system cloud-image-utils
+      - run: ./e2e/run.sh
