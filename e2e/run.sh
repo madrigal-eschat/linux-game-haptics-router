@@ -105,7 +105,10 @@ if ! ssh "${SSH_OPTS[@]}" e2e@127.0.0.1 true 2>/dev/null; then
 fi
 
 echo "copying binaries into VM..."
-scp "${SSH_OPTS[@]}" \
+# scp's port flag is -P (capital), unlike ssh's -p — reuse SSH_OPTS but swap
+# the port flag rather than sharing SSH_OPTS directly.
+SCP_OPTS=(-i "$SSH_KEY" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -P "$SSH_PORT")
+scp "${SCP_OPTS[@]}" \
     "$REPO_ROOT/target/release/game-haptics-router" \
     "$REPO_ROOT/target/release/e2e-tests" \
     e2e@127.0.0.1:~/
