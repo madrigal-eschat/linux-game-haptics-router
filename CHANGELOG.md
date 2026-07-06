@@ -1,3 +1,10 @@
+## [0.1.2](https://github.com/madrigal-eschat/linux-game-haptics-router/compare/v0.1.1...v0.1.2) (2026-07-06)
+
+
+### Bug Fixes
+
+* **ci:** make codecov patch status informational ([2972791](https://github.com/madrigal-eschat/linux-game-haptics-router/commit/2972791d6a78c81bd68069c39daff195751493b1))
+
 ## [0.1.1](https://github.com/madrigal-eschat/linux-game-haptics-router/compare/v0.1.0...v0.1.1) (2026-07-06)
 
 
