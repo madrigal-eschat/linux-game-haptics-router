@@ -52,7 +52,9 @@ impl App {
             if is_new {
                 log::info!(
                     "rescan: device {} ({}) at {}",
-                    info.device_id, info.name, info.path
+                    info.device_id,
+                    info.name,
+                    info.path
                 );
                 self.spawn_reader(info);
             }
@@ -62,7 +64,8 @@ impl App {
     pub fn handle_effect_uploaded(&mut self, uploaded: EffectUploaded) {
         log::info!(
             "effect_store: inserting tgid={} effect_id={}",
-            uploaded.tgid, uploaded.effect_id
+            uploaded.tgid,
+            uploaded.effect_id
         );
         upsert_effect(
             &mut self.effect_store,
@@ -98,7 +101,8 @@ impl App {
                         } else {
                             log::info!(
                                 "Play effect_id={}: found effect but no points produced (kind={})",
-                                effect_id, effect.kind
+                                effect_id,
+                                effect.kind
                             );
                         }
                     }
@@ -108,7 +112,8 @@ impl App {
                     None => {
                         log::info!(
                             "Play effect_id={}: no matching effect in store ({} known)",
-                            effect_id, self.effect_store.len()
+                            effect_id,
+                            self.effect_store.len()
                         );
                     }
                 }
@@ -124,7 +129,9 @@ impl App {
 fn spawn_device_reader(info: &DeviceInfo, ff_tx: &mpsc::Sender<(String, FfEvent)>) {
     log::info!(
         "device added: {} ({}) at {}",
-        info.device_id, info.name, info.path
+        info.device_id,
+        info.name,
+        info.path
     );
     let tx = ff_tx.clone();
     let path = info.path.clone();
@@ -144,7 +151,8 @@ fn spawn_device_reader(info: &DeviceInfo, ff_tx: &mpsc::Sender<(String, FfEvent)
                             Err(e) => {
                                 log::warn!(
                                     "evdev read error on {}: {}, will retry reopening",
-                                    device_id, e
+                                    device_id,
+                                    e
                                 );
                                 break;
                             }
@@ -187,9 +195,13 @@ mod tests {
 
     fn dummy_effect() -> FfEffect {
         FfEffect {
-            kind: 0, id: 0, direction: 0,
-            trigger_button: 0, trigger_interval: 0,
-            replay_length: 0, replay_delay: 0,
+            kind: 0,
+            id: 0,
+            direction: 0,
+            trigger_button: 0,
+            trigger_interval: 0,
+            replay_length: 0,
+            replay_delay: 0,
             u: [0u16; 7],
         }
     }

@@ -1,12 +1,12 @@
 #![no_std]
 #![no_main]
 
+use aya_ebpf::bpf_printk;
+use aya_ebpf::helpers::bpf_probe_read_user_buf;
 use aya_ebpf::macros::map;
 use aya_ebpf::macros::tracepoint;
 use aya_ebpf::programs::TracePointContext;
-use haptics_probe_common::{EnterScratch, FfEffect, ProbeEvent, eviocsff_nr};
-use aya_ebpf::helpers::bpf_probe_read_user_buf;
-use aya_ebpf::bpf_printk;
+use haptics_probe_common::{eviocsff_nr, EnterScratch, FfEffect, ProbeEvent};
 
 /// Per-thread scratch: tgid<<32|pid → EnterScratch.
 /// LRU because a killed/aborted thread never reaches sys_exit_ioctl to
@@ -59,7 +59,13 @@ fn try_enter(ctx: &TracePointContext) -> Result<(), i64> {
     // offsets, rather than memcpy'ing onto our differently-shaped FfEffect.
     let mut raw = [0u8; 30];
     if let Err(e) = unsafe { bpf_probe_read_user_buf(arg as *const u8, &mut raw) } {
-        unsafe { bpf_printk!(c"haptics-probe: probe_read_user_buf FAILED arg=0x%lx err=%d", arg, e as i64) };
+        unsafe {
+            bpf_printk!(
+                c"haptics-probe: probe_read_user_buf FAILED arg=0x%lx err=%d",
+                arg,
+                e as i64
+            )
+        };
         return Err(0);
     }
 
@@ -74,8 +80,13 @@ fn try_enter(ctx: &TracePointContext) -> Result<(), i64> {
         replay_length: u16_at(10),
         replay_delay: u16_at(12),
         u: [
-            u16_at(16), u16_at(18), u16_at(20), u16_at(22),
-            u16_at(24), u16_at(26), u16_at(28),
+            u16_at(16),
+            u16_at(18),
+            u16_at(20),
+            u16_at(22),
+            u16_at(24),
+            u16_at(26),
+            u16_at(28),
         ],
     };
 
@@ -85,9 +96,17 @@ fn try_enter(ctx: &TracePointContext) -> Result<(), i64> {
         effect,
     };
     unsafe {
-        ENTER_SCRATCH.insert(&tgid_pid, &scratch, 0).map_err(|_| 0i64)?;
+        ENTER_SCRATCH
+            .insert(&tgid_pid, &scratch, 0)
+            .map_err(|_| 0i64)?;
     }
-    unsafe { bpf_printk!(c"haptics-probe: ENTER_SCRATCH stored, kind=%d replay_length=%d", effect.kind as i64, effect.replay_length as i64) };
+    unsafe {
+        bpf_printk!(
+            c"haptics-probe: ENTER_SCRATCH stored, kind=%d replay_length=%d",
+            effect.kind as i64,
+            effect.replay_length as i64
+        )
+    };
     Ok(())
 }
 
@@ -108,10 +127,15 @@ fn try_exit(ctx: &TracePointContext) -> Result<(), i64> {
     };
 
     let mut id_bytes = [0u8; 2];
-    if let Err(e) = unsafe {
-        bpf_probe_read_user_buf((scratch.ff_effect_ptr + 2) as *const u8, &mut id_bytes)
-    } {
-        unsafe { bpf_printk!(c"haptics-probe: exit probe_read_user_buf(id) FAILED err=%d", e as i64) };
+    if let Err(e) =
+        unsafe { bpf_probe_read_user_buf((scratch.ff_effect_ptr + 2) as *const u8, &mut id_bytes) }
+    {
+        unsafe {
+            bpf_printk!(
+                c"haptics-probe: exit probe_read_user_buf(id) FAILED err=%d",
+                e as i64
+            )
+        };
         return Err(0);
     }
     let effect_id = i16::from_le_bytes(id_bytes);
@@ -122,10 +146,18 @@ fn try_exit(ctx: &TracePointContext) -> Result<(), i64> {
 
     let store_key = ((tgid as u64) << 32) | (effect_id as u16 as u64);
     unsafe {
-        EFFECT_STORE.insert(&store_key, &effect, 0).map_err(|_| 0i64)?;
+        EFFECT_STORE
+            .insert(&store_key, &effect, 0)
+            .map_err(|_| 0i64)?;
         ENTER_SCRATCH.remove(&tgid_pid).ok();
     };
-    unsafe { bpf_printk!(c"haptics-probe: EFFECT_STORE inserted tgid=%d effect_id=%d", tgid as i64, effect_id as i64) };
+    unsafe {
+        bpf_printk!(
+            c"haptics-probe: EFFECT_STORE inserted tgid=%d effect_id=%d",
+            tgid as i64,
+            effect_id as i64
+        )
+    };
 
     let event = ProbeEvent {
         tgid,
@@ -133,9 +165,7 @@ fn try_exit(ctx: &TracePointContext) -> Result<(), i64> {
         _pad: 0,
         effect,
     };
-    if let Some(mut entry) = unsafe {
-        EVENTS.reserve::<ProbeEvent>(0)
-    } {
+    if let Some(mut entry) = unsafe { EVENTS.reserve::<ProbeEvent>(0) } {
         entry.write(event);
         entry.submit(0);
     }
