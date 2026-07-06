@@ -46,14 +46,17 @@ impl Playback {
         let client = loop {
             let c = ButtplugClient::new("haptics-probe");
             let transport = ButtplugWebsocketClientTransport::new_insecure_connector(ws_url);
-            let connector: buttplug::connector::ButtplugRemoteClientConnector<ButtplugWebsocketClientTransport> =
-                buttplug::connector::ButtplugRemoteClientConnector::new(transport);
+            let connector: buttplug::connector::ButtplugRemoteClientConnector<
+                ButtplugWebsocketClientTransport,
+            > = buttplug::connector::ButtplugRemoteClientConnector::new(transport);
             match c.connect(connector).await {
                 Ok(()) => break c,
                 Err(e) => {
                     log::warn!(
                         "buttplug connect to {} failed: {}, retrying in {:?}",
-                        ws_url, e, delay
+                        ws_url,
+                        e,
+                        delay
                     );
                     tokio::time::sleep(delay).await;
                     delay = std::cmp::min(delay * 2, MAX_DELAY);
@@ -102,7 +105,11 @@ impl Playback {
         schedule
     }
 
-    fn format_schedule_log(device_id: &str, points: &[HapticPoint], schedule: &[(u32, f32)]) -> String {
+    fn format_schedule_log(
+        device_id: &str,
+        points: &[HapticPoint],
+        schedule: &[(u32, f32)],
+    ) -> String {
         let boundaries = points
             .iter()
             .map(|p| format!("{}ms:{:.2}", p.dt_ms, p.intensity))
@@ -124,7 +131,8 @@ impl Playback {
     /// must not delay delivery to the others sharing this tick.
     async fn send_scalar(client: &ButtplugClient, targets: &Option<Vec<u32>>, intensity: f32) {
         let intensity = intensity.clamp(0.0, 1.0);
-        let cmd = ClientDeviceOutputCommand::Vibrate(ClientDeviceCommandValue::Percent(intensity as f64));
+        let cmd =
+            ClientDeviceOutputCommand::Vibrate(ClientDeviceCommandValue::Percent(intensity as f64));
         let mut sends = tokio::task::JoinSet::new();
         for (idx, dev) in client.devices() {
             if let Some(t) = targets {
@@ -135,7 +143,12 @@ impl Playback {
             let cmd = cmd.clone();
             sends.spawn(async move {
                 if let Err(e) = dev.run_output(&cmd).await {
-                    log::warn!("scalar command failed for device {} ({}): {}", idx, dev.name(), e);
+                    log::warn!(
+                        "scalar command failed for device {} ({}): {}",
+                        idx,
+                        dev.name(),
+                        e
+                    );
                 }
             });
         }
@@ -159,7 +172,10 @@ impl Playback {
 
     async fn play_sequence(self: Arc<Self>, device_id: String, points: Vec<HapticPoint>, gen: u64) {
         let schedule = Self::interpolate_points(&points);
-        log::info!("{}", Self::format_schedule_log(&device_id, &points, &schedule));
+        log::info!(
+            "{}",
+            Self::format_schedule_log(&device_id, &points, &schedule)
+        );
         let targets = resolve_targets(&self.device_map, &device_id);
         let start = tokio::time::Instant::now();
         for (t_ms, intensity) in &schedule {
@@ -219,7 +235,10 @@ mod tests {
         // linear ramp down from 1.0 to 0.0
         for (t, i) in &schedule {
             let expected = 1.0 - (*t as f32 / 100.0);
-            assert!((i - expected).abs() < 1e-6, "t={t} i={i} expected={expected}");
+            assert!(
+                (i - expected).abs() < 1e-6,
+                "t={t} i={i} expected={expected}"
+            );
         }
     }
 

@@ -27,7 +27,13 @@ jobs:
         with:
           target: ${{ matrix.target }}
 
-      - run: cargo build --workspace --release --target ${{ matrix.target }}
+      # --exclude haptics-probe-ebpf: it's #![no_std]#![no_main] with its own
+      # #[panic_handler] and can only build correctly through aya-build's
+      # bpfel-unknown-none cross-compile (invoked from haptics-probe's
+      # build.rs, which still runs and produces the real embedded bytecode
+      # regardless of this exclude) — building it directly for a real target
+      # links std and collides with its panic_handler (E0152).
+      - run: cargo build --workspace --exclude haptics-probe-ebpf --release --target ${{ matrix.target }}
 
       - name: Package
         run: |
