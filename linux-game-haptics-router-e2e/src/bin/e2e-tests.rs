@@ -1,10 +1,10 @@
 use anyhow::{Context, Result};
-use evdev::Device;
+use evdev::{Device, FFEffectData, FFEffectKind, FFReplay, FFTrigger};
 use linux_game_haptics_router_e2e::gamepad::spawn_fake_gamepad;
 use linux_game_haptics_router_e2e::protocol_server::{spawn_fake_server, ReceivedCommand};
 use linux_game_haptics_router_e2e::scenarios::smoke_scenarios;
 use linux_game_haptics_router_e2e::timing::{
-    assert_command_within_bound, assert_final_zero_within_bound, expected_end_time,
+    assert_command_within_bound, assert_final_zero_within_bound, expected_end_time, LATENCY_BOUND,
 };
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
@@ -30,12 +30,43 @@ async fn drain_until(
     out
 }
 
-fn spawn_daemon(ws_url: &str, device_id: &str) -> Result<Child> {
+/// A short rumble effect, mirroring `scenarios::smoke_scenarios()`'s
+/// `ff_rumble` case, for the multi-gesture scenarios built directly in this
+/// orchestrator (rapid retrigger, multi-device) that need more than one
+/// gamepad/gesture and so don't fit `scenarios::Scenario`'s one-shot shape.
+fn rumble_effect(length_ms: u16) -> FFEffectData {
+    FFEffectData {
+        direction: 0,
+        trigger: FFTrigger::default(),
+        replay: FFReplay {
+            length: length_ms,
+            delay: 0,
+        },
+        kind: FFEffectKind::Rumble {
+            strong_magnitude: 0xffff,
+            weak_magnitude: 0xffff,
+        },
+    }
+}
+
+/// Kills (and reaps) the wrapped daemon child on drop, so every exit path out
+/// of `main` — including an early `?` return partway through setup — cleans
+/// up the subprocess. `Child`'s own `Drop` impl does *not* do this on Unix.
+struct DaemonGuard(Child);
+
+impl Drop for DaemonGuard {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
+fn spawn_daemon(ws_url: &str, device_map_json: &str) -> Result<Child> {
     Command::new("./game-haptics-router")
         .arg("--ws-url")
         .arg(ws_url)
         .arg("--device-map")
-        .arg(format!("{{\"{}\": null}}", device_id))
+        .arg(device_map_json)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -61,7 +92,18 @@ async fn main() -> Result<()> {
     let gamepad = spawn_fake_gamepad("e2e Fake Gamepad")?;
     let device_id = device_id_for(&gamepad.device_node)?;
 
-    let mut daemon = spawn_daemon(&ws_url, &device_id)?;
+    // A second virtual gamepad, spawned up front (device_map is fixed for
+    // the daemon's whole lifetime) so the multi-device scenario below can
+    // exercise per-device routing without restarting the daemon. It's
+    // mapped to buttplug device index 99, which the fake server never
+    // advertises (it only ever advertises index 0) — see that scenario's
+    // comment for why this is the isolation check we can actually make.
+    let gamepad_b = spawn_fake_gamepad("e2e Fake Gamepad B")?;
+    let device_id_b = device_id_for(&gamepad_b.device_node)?;
+
+    let device_map_json = format!(r#"{{"{}": null, "{}": [99]}}"#, device_id, device_id_b);
+    let daemon_child = spawn_daemon(&ws_url, &device_map_json)?;
+    let mut daemon = DaemonGuard(daemon_child);
     // The daemon connects to the fake server, then opens the evdev device
     // and starts reading FF events — give it a moment before issuing gestures.
     tokio::time::sleep(Duration::from_millis(500)).await;
@@ -89,18 +131,152 @@ async fn main() -> Result<()> {
         let deadline = expected_end + Duration::from_millis(500);
         let commands = drain_until(&mut rx, deadline).await;
 
-        match assert_command_within_bound(issued_at, &commands) {
-            Ok(_) => {}
-            Err(e) => failures.push(format!("{}: {}", scenario.name, e)),
+        let mut scenario_failed = false;
+        if let Err(e) = assert_command_within_bound(issued_at, &commands) {
+            failures.push(format!("{}: {}", scenario.name, e));
+            scenario_failed = true;
         }
-        match assert_final_zero_within_bound(expected_end, &commands) {
-            Ok(()) => println!("PASS {}", scenario.name),
-            Err(e) => failures.push(format!("{}: {}", scenario.name, e)),
+        if let Err(e) = assert_final_zero_within_bound(expected_end, &commands) {
+            failures.push(format!("{}: {}", scenario.name, e));
+            scenario_failed = true;
+        }
+        if !scenario_failed {
+            println!("PASS {}", scenario.name);
         }
     }
 
-    daemon.kill().ok();
-    if let Some(stdout) = daemon.stdout.take() {
+    // ── Scenario 4: rapid retrigger ──
+    // Two Play events issued ~5ms apart — well inside the daemon's 10ms
+    // throttle window (linux-game-haptics-router/src/throttle.rs,
+    // MIN_INTERVAL_MS = 10). Which Play's haptic emission actually gets
+    // through is inherently a race: the throttle may swallow the first one
+    // entirely. So rather than asserting which Play "wins", we assert the
+    // weaker but still meaningful property that whichever Play does get
+    // through still lands its buttplug command within the latency bound,
+    // measured from the *second* issue time (the later, more conservative
+    // reference point — a command that beat the bound relative to the first
+    // issue necessarily beats it relative to the second too).
+    {
+        let name = "rapid_retrigger";
+        match game_dev.upload_ff_effect(rumble_effect(300)) {
+            Ok(mut effect) => {
+                if let Err(e) = effect.play(1) {
+                    failures.push(format!("{}: first play failed: {}", name, e));
+                } else {
+                    tokio::time::sleep(Duration::from_millis(5)).await;
+                    let second_issue = Instant::now();
+                    if let Err(e) = effect.play(1) {
+                        failures.push(format!("{}: second play failed: {}", name, e));
+                    } else {
+                        let deadline = second_issue + LATENCY_BOUND + Duration::from_millis(500);
+                        let commands = drain_until(&mut rx, deadline).await;
+                        match assert_command_within_bound(second_issue, &commands) {
+                            Ok(_) => println!("PASS {}", name),
+                            Err(e) => failures.push(format!("{}: {}", name, e)),
+                        }
+                    }
+                }
+            }
+            Err(e) => failures.push(format!("{}: upload_ff_effect failed: {}", name, e)),
+        }
+    }
+
+    // ── Scenario 5: multi-device isolation ──
+    // The fake buttplug server (protocol_server.rs's device_list_message)
+    // only ever advertises a single device at index 0, so we cannot
+    // distinguish gamepad A's wire traffic from gamepad B's by
+    // ReceivedCommand::device_index/feature_index — both would report 0
+    // either way regardless of which virtual gamepad triggered them. A
+    // genuine per-device-index crosstalk assertion isn't achievable against
+    // this fake server's single-device model.
+    //
+    // Instead this leans on the *client-side* target-list filtering in
+    // Playback::send_scalar (linux-game-haptics-router/src/playback.rs):
+    // gamepad B's --device-map entry above points at buttplug device index
+    // 99, which doesn't exist, so every OutputCmd for gamepad B's effects
+    // should be filtered out client-side and nothing should arrive at all,
+    // while gamepad A's `null` (broadcast) entry still reaches the one real
+    // device. If the daemon's per-device_id routing ever got crossed — B's
+    // gestures picking up A's target list or vice versa — this would flip:
+    // B would start producing commands, or A would stop.
+    {
+        let name = "multi_device_isolation";
+        let mut scenario_failed = false;
+
+        match Device::open(&gamepad_b.device_node) {
+            Ok(mut game_dev_b) => {
+                // Gamepad A: broadcast-mapped, should produce a command.
+                match game_dev.upload_ff_effect(rumble_effect(200)) {
+                    Ok(mut effect) => {
+                        let issued_at = Instant::now();
+                        if let Err(e) = effect.play(1) {
+                            failures.push(format!("{} (gamepad A): play failed: {}", name, e));
+                            scenario_failed = true;
+                        } else {
+                            let deadline = issued_at + LATENCY_BOUND + Duration::from_millis(500);
+                            let commands = drain_until(&mut rx, deadline).await;
+                            if let Err(e) = assert_command_within_bound(issued_at, &commands) {
+                                failures.push(format!("{} (gamepad A): {}", name, e));
+                                scenario_failed = true;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        failures.push(format!(
+                            "{} (gamepad A): upload_ff_effect failed: {}",
+                            name, e
+                        ));
+                        scenario_failed = true;
+                    }
+                }
+
+                // Gamepad B: mapped to buttplug device index 99, which the
+                // fake server never advertises — nothing should arrive.
+                match game_dev_b.upload_ff_effect(rumble_effect(200)) {
+                    Ok(mut effect) => {
+                        if let Err(e) = effect.play(1) {
+                            failures.push(format!("{} (gamepad B): play failed: {}", name, e));
+                            scenario_failed = true;
+                        } else {
+                            let deadline = Instant::now() + Duration::from_millis(700);
+                            let commands = drain_until(&mut rx, deadline).await;
+                            if !commands.is_empty() {
+                                failures.push(format!(
+                                    "{} (gamepad B): expected no commands routed to a \
+                                     nonexistent target index, got {}",
+                                    name,
+                                    commands.len()
+                                ));
+                                scenario_failed = true;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        failures.push(format!(
+                            "{} (gamepad B): upload_ff_effect failed: {}",
+                            name, e
+                        ));
+                        scenario_failed = true;
+                    }
+                }
+            }
+            Err(e) => {
+                failures.push(format!(
+                    "{}: opening gamepad B as \"the game\" failed: {}",
+                    name, e
+                ));
+                scenario_failed = true;
+            }
+        }
+
+        if !scenario_failed {
+            println!("PASS {}", name);
+        }
+    }
+
+    let _ = daemon.0.kill();
+    let _ = daemon.0.wait();
+    if let Some(stdout) = daemon.0.stdout.take() {
         use std::io::Read;
         let mut s = String::new();
         let _ = std::io::BufReader::new(stdout).read_to_string(&mut s);
