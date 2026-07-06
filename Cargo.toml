@@ -3,5 +3,6 @@ members = [
     "linux-game-haptics-router-common",
     "linux-game-haptics-router-ebpf",
     "linux-game-haptics-router",
+    "linux-game-haptics-router-e2e",
 ]
 resolver = "2"
