@@ -86,7 +86,10 @@ mod tests {
         let scenarios = smoke_scenarios();
         assert_eq!(scenarios.len(), 3);
         let names: Vec<_> = scenarios.iter().map(|s| s.name).collect();
-        assert_eq!(names, vec!["ff_rumble", "ff_periodic_sine", "ff_constant_with_envelope"]);
+        assert_eq!(
+            names,
+            vec!["ff_rumble", "ff_periodic_sine", "ff_constant_with_envelope"]
+        );
     }
 
     #[test]

@@ -145,10 +145,18 @@ async fn main() -> Result<()> {
     // end — otherwise a filled pipe buffer stalls the daemon mid-scenario.
     // `spawn_daemon` always requests `Stdio::piped()` for both, so these
     // `.take()`s are expected to succeed.
-    let (daemon_stdout, stdout_drain) =
-        spawn_pipe_drain(daemon_child.stdout.take().context("daemon stdout not piped")?);
-    let (daemon_stderr, stderr_drain) =
-        spawn_pipe_drain(daemon_child.stderr.take().context("daemon stderr not piped")?);
+    let (daemon_stdout, stdout_drain) = spawn_pipe_drain(
+        daemon_child
+            .stdout
+            .take()
+            .context("daemon stdout not piped")?,
+    );
+    let (daemon_stderr, stderr_drain) = spawn_pipe_drain(
+        daemon_child
+            .stderr
+            .take()
+            .context("daemon stderr not piped")?,
+    );
     let mut daemon = DaemonGuard(daemon_child);
     // The daemon connects to the fake server, then opens the evdev device
     // and starts reading FF events — give it a moment before issuing gestures.

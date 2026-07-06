@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use buttplug_core::message::{
-    ButtplugMessage, ButtplugClientMessageV4, ButtplugServerMessageV4, DeviceFeature,
+    ButtplugClientMessageV4, ButtplugMessage, ButtplugServerMessageV4, DeviceFeature,
     DeviceFeatureOutput, DeviceFeatureOutputValueProperties, DeviceListV4, DeviceMessageInfoV4,
     OkV0, ServerInfoV4,
 };
