@@ -111,4 +111,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/rust-bpf-setup
       - run: sudo apt-get update && sudo apt-get install -y qemu-system cloud-image-utils
+      # The runner user isn't in the kvm group by default, so /dev/kvm exists
+      # but isn't accessible even when present (e.g. ubuntu-latest).
+      - run: '[ -e /dev/kvm ] && sudo chmod 666 /dev/kvm || true'
       - run: ./e2e/run.sh
