@@ -1316,6 +1316,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "linux-game-haptics-router-e2e"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "buttplug_core",
+ "env_logger",
+ "evdev",
+ "futures-util",
+ "log",
+ "serde_json",
+ "tokio",
+ "tokio-tungstenite",
+]
+
+[[package]]
 name = "linux-game-haptics-router-ebpf"
 version = "0.1.1"
 dependencies = [
