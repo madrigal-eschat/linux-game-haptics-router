@@ -10,14 +10,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // cross-compile and stub the expected output file instead.
     if std::env::var_os("SKIP_EBPF_BUILD").is_some() {
         let out_dir = PathBuf::from(std::env::var("OUT_DIR")?);
-        std::fs::write(out_dir.join("haptics-probe-ebpf"), [])?;
+        std::fs::write(out_dir.join("linux-game-haptics-router-ebpf"), [])?;
         return Ok(());
     }
 
     build_ebpf(
         [Package {
-            name: "haptics-probe-ebpf",
-            root_dir: "../haptics-probe-ebpf",
+            name: "linux-game-haptics-router-ebpf",
+            root_dir: "../linux-game-haptics-router-ebpf",
             no_default_features: false,
             features: &[],
         }],

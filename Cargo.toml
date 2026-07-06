@@ -1,7 +1,7 @@
 [workspace]
 members = [
-    "haptics-probe-common",
-    "haptics-probe-ebpf",
-    "haptics-probe",
+    "linux-game-haptics-router-common",
+    "linux-game-haptics-router-ebpf",
+    "linux-game-haptics-router",
 ]
 resolver = "2"

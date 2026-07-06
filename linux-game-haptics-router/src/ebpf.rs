@@ -2,7 +2,7 @@ use anyhow::Result;
 use aya::maps::RingBuf;
 use aya::programs::TracePoint;
 use aya::{include_bytes_aligned, Ebpf};
-use haptics_probe_common::ProbeEvent;
+use linux_game_haptics_router_common::ProbeEvent;
 use tokio::io::unix::AsyncFd;
 use tokio::sync::mpsc;
 
@@ -10,12 +10,13 @@ use tokio::sync::mpsc;
 pub struct EffectUploaded {
     pub tgid: u32,
     pub effect_id: i16,
-    pub effect: haptics_probe_common::FfEffect,
+    pub effect: linux_game_haptics_router_common::FfEffect,
 }
 
 /// Load and attach the eBPF program. Returns a receiver for effect-upload events.
 pub async fn load_probe() -> Result<(Ebpf, mpsc::Receiver<EffectUploaded>)> {
-    let bpf_bytes = include_bytes_aligned!(concat!(env!("OUT_DIR"), "/haptics-probe-ebpf"));
+    let bpf_bytes =
+        include_bytes_aligned!(concat!(env!("OUT_DIR"), "/linux-game-haptics-router-ebpf"));
 
     let mut bpf = Ebpf::load(bpf_bytes)?;
 

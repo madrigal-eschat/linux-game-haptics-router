@@ -1,16 +1,16 @@
 [package]
-name = "haptics-probe"
+name = "linux-game-haptics-router"
 version = "0.1.1"
 edition = "2021"
 
 [[bin]]
-name = "haptics-probe"
+name = "game-haptics-router"
 path = "src/main.rs"
 
 [dependencies]
 aya            = "0.14"
 aya-log        = "0.3"
-haptics-probe-common = { path = "../haptics-probe-common", features = ["user"] }
+linux-game-haptics-router-common = { path = "../linux-game-haptics-router-common", features = ["user"] }
 evdev          = "0.13"
 tokio          = { version = "1", features = ["full"] }
 anyhow         = "1"

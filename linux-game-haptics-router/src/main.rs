@@ -122,13 +122,13 @@ mod tests {
 
     #[test]
     fn ws_url_required_without_list_devices() {
-        let result = Args::try_parse_from(["haptics-probe"]);
+        let result = Args::try_parse_from(["game-haptics-router"]);
         assert!(result.is_err());
     }
 
     #[test]
     fn ws_url_not_required_with_list_devices() {
-        let args = Args::try_parse_from(["haptics-probe", "--list-devices"]).unwrap();
+        let args = Args::try_parse_from(["game-haptics-router", "--list-devices"]).unwrap();
         assert!(args.list_devices);
         assert!(args.ws_url.is_none());
     }
@@ -136,7 +136,8 @@ mod tests {
     #[test]
     fn ws_url_accepted_and_defaults_applied() {
         let args =
-            Args::try_parse_from(["haptics-probe", "--ws-url", "ws://localhost:12345"]).unwrap();
+            Args::try_parse_from(["game-haptics-router", "--ws-url", "ws://localhost:12345"])
+                .unwrap();
         assert_eq!(args.ws_url.as_deref(), Some("ws://localhost:12345"));
         assert_eq!(args.scale, 1.0);
         assert!(args.device_map.is_empty());

@@ -18,12 +18,12 @@ and drop the binary in `/usr/local/bin`:
 
 ```bash
 # amd64
-curl -LO https://github.com/madrigal-eschat/linux-game-haptics-router/releases/latest/download/haptics-probe-<tag>-linux-amd64.tar.gz
+curl -LO https://github.com/madrigal-eschat/linux-game-haptics-router/releases/latest/download/game-haptics-router-<tag>-linux-amd64.tar.gz
 # or aarch64
-curl -LO https://github.com/madrigal-eschat/linux-game-haptics-router/releases/latest/download/haptics-probe-<tag>-linux-aarch64.tar.gz
+curl -LO https://github.com/madrigal-eschat/linux-game-haptics-router/releases/latest/download/game-haptics-router-<tag>-linux-aarch64.tar.gz
 
-tar xzf haptics-probe-<tag>-linux-*.tar.gz
-sudo install -m 755 haptics-probe-<tag>-linux-*/haptics-probe /usr/local/bin/haptics-probe
+tar xzf game-haptics-router-<tag>-linux-*.tar.gz
+sudo install -m 755 game-haptics-router-<tag>-linux-*/game-haptics-router /usr/local/bin/game-haptics-router
 ```
 
 Replace `<tag>` with the actual release tag (e.g. `v1.2.0`) shown on the
@@ -36,7 +36,7 @@ Loading the eBPF probe and reading raw evdev nodes both need root. Start
 server) first, then:
 
 ```bash
-sudo haptics-probe --ws-url ws://127.0.0.1:12345 --scale 0.8
+sudo game-haptics-router --ws-url ws://127.0.0.1:12345 --scale 0.8
 ```
 
 `ws://127.0.0.1:12345` is Intiface Central's default WebSocket address.
@@ -44,9 +44,9 @@ sudo haptics-probe --ws-url ws://127.0.0.1:12345 --scale 0.8
 Other flags:
 
 ```bash
-sudo haptics-probe --list-devices   # print FF-capable evdev devices as JSON, then exit
+sudo game-haptics-router --list-devices   # print FF-capable evdev devices as JSON, then exit
 
-sudo haptics-probe --ws-url ws://127.0.0.1:12345 \
+sudo game-haptics-router --ws-url ws://127.0.0.1:12345 \
   --scale 1.0 \
   --device-map '{"usb-0000:00:14.0-1/input0": [0, 1]}'   # route one evdev device to specific toy indices; omit or use null to broadcast to every connected toy
 ```
@@ -55,7 +55,7 @@ While running, the global scale can be updated live by writing a JSON line
 to stdin:
 
 ```bash
-echo '{"scale": 0.5}' | sudo tee /proc/$(pgrep haptics-probe)/fd/0
+echo '{"scale": 0.5}' | sudo tee /proc/$(pgrep game-haptics-router)/fd/0
 ```
 
 (or just pipe it in directly if you're supervising the process yourself).
@@ -68,7 +68,7 @@ echo '{"scale": 0.5}' | sudo tee /proc/$(pgrep haptics-probe)/fd/0
   is invisible to this tool.
 - Must be started **before** the game launches. The eBPF probe only sees
   `EVIOCSFF` calls that happen after it attaches — effects uploaded to a
-  device before `haptics-probe` is running are missed until the game
+  device before `game-haptics-router` is running are missed until the game
   re-uploads them (e.g. on a restart).
 - No per-game or per-controller filtering yet — every FF-capable evdev device
   found on the system gets routed, and all captured effects across every
@@ -77,26 +77,32 @@ echo '{"scale": 0.5}' | sudo tee /proc/$(pgrep haptics-probe)/fd/0
 
 ## Project setup & build
 
-Workspace of three crates: `haptics-probe` (userspace daemon),
-`haptics-probe-ebpf` (the eBPF program), `haptics-probe-common` (shared
+Workspace of three crates: `linux-game-haptics-router` (userspace daemon, built as `game-haptics-router`),
+`linux-game-haptics-router-ebpf` (the eBPF program), `linux-game-haptics-router-common` (shared
 types). See [CLAUDE.md](CLAUDE.md) for the full architecture breakdown.
 
 Building the eBPF program needs a nightly toolchain (for `aya-build`) plus
 `bpf-linker`, alongside the stable toolchain used for the rest of the
-workspace:
+workspace. `--exclude linux-game-haptics-router-ebpf` is required on every
+command below: that crate is `#![no_std]#![no_main]` with its own
+`#[panic_handler]` and can only compile through aya-build's cross-compile
+(invoked from `linux-game-haptics-router`'s `build.rs`, which still runs and
+produces the real embedded bytecode regardless of the exclude) — building it
+directly as a normal workspace member links std and collides with its
+`#[panic_handler]`.
 
 ```bash
 rustup toolchain install nightly --component rust-src
 cargo install bpf-linker
 
-cargo build --workspace          # debug build
-cargo build --workspace --release
+cargo build --workspace --exclude linux-game-haptics-router-ebpf          # debug build
+cargo build --workspace --exclude linux-game-haptics-router-ebpf --release
 ```
 
 Run the test suite:
 
 ```bash
-cargo test --workspace
+cargo test --workspace --exclude linux-game-haptics-router-ebpf
 ```
 
 Cross-compiling for aarch64 additionally needs the target and a cross linker:
@@ -105,7 +111,7 @@ Cross-compiling for aarch64 additionally needs the target and a cross linker:
 rustup target add aarch64-unknown-linux-gnu
 sudo apt install gcc-aarch64-linux-gnu   # Debian/Ubuntu
 CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc \
-  cargo build --workspace --release --target aarch64-unknown-linux-gnu
+  cargo build --workspace --exclude linux-game-haptics-router-ebpf --release --target aarch64-unknown-linux-gnu
 ```
 
 Running the built binary (whether via `cargo run` or the installed binary)

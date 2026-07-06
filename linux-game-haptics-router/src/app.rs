@@ -3,7 +3,7 @@ use crate::ebpf::EffectUploaded;
 use crate::playback::Playback;
 use crate::throttle::Throttle;
 use crate::translate;
-use haptics_probe_common::FfEffect;
+use linux_game_haptics_router_common::FfEffect;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::mpsc;

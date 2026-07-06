@@ -12,9 +12,9 @@
         "CHANGELOG.md",
         "Cargo.lock",
         "Cargo.toml",
-        "haptics-probe/Cargo.toml",
-        "haptics-probe-common/Cargo.toml",
-        "haptics-probe-ebpf/Cargo.toml"
+        "linux-game-haptics-router/Cargo.toml",
+        "linux-game-haptics-router-common/Cargo.toml",
+        "linux-game-haptics-router-ebpf/Cargo.toml"
       ],
       "message": "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
     }],

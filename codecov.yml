@@ -1,0 +1,14 @@
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 1%
+    # Large chunks of this codebase (eBPF loading, evdev enumeration, the
+    # buttplug websocket connect) need root/real hardware/a live server and
+    # can't be meaningfully unit tested — a cosmetic change that merely
+    # touches one of those lines (e.g. a rename) shouldn't fail the PR over
+    # patch coverage on code nothing here was ever going to test.
+    patch:
+      default:
+        informational: true

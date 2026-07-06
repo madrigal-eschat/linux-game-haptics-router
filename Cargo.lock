@@ -1029,41 +1029,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "haptics-probe"
-version = "0.1.1"
-dependencies = [
- "anyhow",
- "aya",
- "aya-build",
- "aya-log",
- "buttplug",
- "clap",
- "env_logger",
- "evdev",
- "haptics-probe-common",
- "log",
- "serde",
- "serde_json",
- "tokio",
-]
-
-[[package]]
-name = "haptics-probe-common"
-version = "0.1.1"
-dependencies = [
- "bson",
-]
-
-[[package]]
-name = "haptics-probe-ebpf"
-version = "0.1.1"
-dependencies = [
- "aya-ebpf",
- "aya-log-ebpf",
- "haptics-probe-common",
-]
-
-[[package]]
 name = "hashbrown"
 version = "0.14.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1323,6 +1288,41 @@ name = "libc"
 version = "0.2.186"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68ab91017fe16c622486840e4c83c9a37afeff978bd239b5293d61ece587de66"
+
+[[package]]
+name = "linux-game-haptics-router"
+version = "0.1.1"
+dependencies = [
+ "anyhow",
+ "aya",
+ "aya-build",
+ "aya-log",
+ "buttplug",
+ "clap",
+ "env_logger",
+ "evdev",
+ "linux-game-haptics-router-common",
+ "log",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "linux-game-haptics-router-common"
+version = "0.1.1"
+dependencies = [
+ "bson",
+]
+
+[[package]]
+name = "linux-game-haptics-router-ebpf"
+version = "0.1.1"
+dependencies = [
+ "aya-ebpf",
+ "aya-log-ebpf",
+ "linux-game-haptics-router-common",
+]
 
 [[package]]
 name = "litemap"

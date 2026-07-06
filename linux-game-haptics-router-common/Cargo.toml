@@ -1,5 +1,5 @@
 [package]
-name = "haptics-probe-common"
+name = "linux-game-haptics-router-common"
 version = "0.1.1"
 edition = "2021"
 
