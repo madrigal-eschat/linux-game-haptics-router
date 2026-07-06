@@ -17,9 +17,20 @@ trap cleanup EXIT
 
 ARCH="$(uname -m)"
 
+MACHINE_ARGS=()
 case "$ARCH" in
-    x86_64)  QEMU_BIN=qemu-system-x86_64; CLOUD_IMAGE_URL="https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img" ;;
-    aarch64) QEMU_BIN=qemu-system-aarch64; CLOUD_IMAGE_URL="https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-arm64.img" ;;
+    x86_64)
+        QEMU_BIN=qemu-system-x86_64
+        CLOUD_IMAGE_URL="https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img"
+        ;;
+    aarch64)
+        QEMU_BIN=qemu-system-aarch64
+        CLOUD_IMAGE_URL="https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-arm64.img"
+        # qemu-system-aarch64 has no default machine type, unlike x86_64.
+        # -cpu max (rather than -cpu host) works under both KVM and TCG, since
+        # GitHub-hosted ubuntu-24.04-arm runners currently have no /dev/kvm.
+        MACHINE_ARGS=(-machine virt -cpu max)
+        ;;
     *) echo "unsupported host arch: $ARCH" >&2; exit 1 ;;
 esac
 
@@ -55,13 +66,21 @@ else
         "$WORK_DIR/user-data" "$WORK_DIR/meta-data"
 fi
 
-if [ ! -e /dev/kvm ]; then
-    echo "warning: /dev/kvm not present on this host — qemu -enable-kvm will fail to start" >&2
+# Use KVM when available; fall back to TCG software emulation otherwise
+# (e.g. GitHub-hosted ubuntu-24.04-arm runners currently have no /dev/kvm).
+# TCG boots are much slower, so the SSH wait loop below has generous headroom.
+ACCEL_ARGS=()
+if [ -e /dev/kvm ]; then
+    ACCEL_ARGS=(-enable-kvm)
+else
+    echo "warning: /dev/kvm not present on this host — falling back to TCG (slow)" >&2
 fi
 
 SSH_PORT=10222
 "$QEMU_BIN" \
-    -m 2048 -smp 2 -enable-kvm -nographic \
+    -m 2048 -smp 2 -nographic \
+    "${ACCEL_ARGS[@]}" \
+    "${MACHINE_ARGS[@]}" \
     -drive file="$OVERLAY",if=virtio,format=qcow2 \
     -drive file="$SEED_ISO",if=virtio,format=raw \
     -netdev user,id=net0,hostfwd=tcp::"$SSH_PORT"-:22 \
@@ -71,7 +90,7 @@ QEMU_PID=$!
 
 echo "waiting for SSH..."
 SSH_OPTS=(-i "$SSH_KEY" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p "$SSH_PORT")
-for _ in $(seq 1 60); do
+for _ in $(seq 1 90); do
     if ssh "${SSH_OPTS[@]}" e2e@127.0.0.1 true 2>/dev/null; then
         break
     fi

@@ -34,10 +34,14 @@ CI/dev host
     2. fetch/cache a minimal cloud image (e.g. Ubuntu 24.04 cloud img), keep
        it read-only; boot from a throwaway qcow2 overlay on top of it
     3. write a cloud-init seed (SSH pubkey, passwordless sudo for test user)
-    4. boot: qemu-system-$(uname -m) -enable-kvm ... (background) — VM arch
-       always matches host arch (no cross-arch emulation), so this only ever
-       runs KVM-accelerated. trap kills it and cleans temp files on any exit
-       path
+    4. boot: qemu-system-$(uname -m) ... (background) — VM arch always
+       matches host arch (no cross-arch emulation). Uses KVM acceleration
+       when `/dev/kvm` is present, falling back to TCG software emulation
+       otherwise (amended: GitHub-hosted `ubuntu-24.04-arm` runners were
+       confirmed, at CI implementation time, to have no `/dev/kvm` — the
+       original "KVM-only" constraint below is relaxed for that case rather
+       than dropping the aarch64 leg entirely). trap kills the VM and cleans
+       temp files on any exit path
     5. poll SSH until reachable (bounded retry, overall timeout)
     6. scp the daemon binary + e2e-tests binary into the VM
     7. timeout <N> ssh -t vmuser 'sudo ./e2e-tests' — capture stdout,
@@ -109,15 +113,21 @@ skew to account for.
 ## CI wiring
 
 - New job in `.github/workflows/ci.yml`, matrixed over host arch so the VM
-  arch always matches the runner arch (no cross-arch/TCG emulation):
-  - `runs-on: ubuntu-latest` (x86_64)
-  - `runs-on: ubuntu-24.04-arm` (aarch64)
-  Both runner families expose `/dev/kvm` for nested virtualization on
-  current GitHub-hosted images — confirm this still holds at implementation
-  time, particularly for the arm runner. `run.sh` picks the matching cloud
-  image + qemu binary (`qemu-system-x86_64` / `qemu-system-aarch64`) based
-  on `uname -m`, mirroring the `target` matrix already in
-  `build-release.yml`.
+  arch always matches the runner arch:
+  - `runs-on: ubuntu-latest` (x86_64) — confirmed to expose `/dev/kvm`;
+    boots KVM-accelerated.
+  - `runs-on: ubuntu-24.04-arm` (aarch64) — confirmed at CI implementation
+    time to have **no** `/dev/kvm` on this GitHub-hosted runner class.
+    `run.sh` falls back to TCG software emulation on this leg (amended from
+    the original no-emulation constraint, by explicit decision, since no
+    KVM-capable GitHub-hosted arm runner currently exists). This leg's VM
+    boot is consequently much slower; the job's `timeout-minutes` and the
+    SSH-readiness retry budget are both sized generously to accommodate it.
+    `fail-fast: false` on the matrix so a failure/slowness on one arch leg
+    doesn't cancel the other.
+  `run.sh` picks the matching cloud image + qemu binary
+  (`qemu-system-x86_64` / `qemu-system-aarch64`) based on `uname -m`,
+  mirroring the `target` matrix already in `build-release.yml`.
   Each matrix leg builds its own release binaries via existing build steps,
   then runs `e2e/run.sh`, with a job-level `timeout-minutes` as a second
   backstop above the in-script SSH timeout.
