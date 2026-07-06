@@ -4,6 +4,17 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 WORK_DIR="$(mktemp -d)"
+
+QEMU_PID=""
+cleanup() {
+    if [ -n "$QEMU_PID" ] && kill -0 "$QEMU_PID" 2>/dev/null; then
+        kill "$QEMU_PID" 2>/dev/null || true
+        wait "$QEMU_PID" 2>/dev/null || true
+    fi
+    rm -rf "$WORK_DIR"
+}
+trap cleanup EXIT
+
 ARCH="$(uname -m)"
 
 case "$ARCH" in
@@ -15,16 +26,6 @@ esac
 CACHE_DIR="${E2E_CACHE_DIR:-$HOME/.cache/linux-game-haptics-router-e2e}"
 mkdir -p "$CACHE_DIR"
 BASE_IMAGE="$CACHE_DIR/base-$ARCH.img"
-
-QEMU_PID=""
-cleanup() {
-    if [ -n "$QEMU_PID" ] && kill -0 "$QEMU_PID" 2>/dev/null; then
-        kill "$QEMU_PID" 2>/dev/null || true
-        wait "$QEMU_PID" 2>/dev/null || true
-    fi
-    rm -rf "$WORK_DIR"
-}
-trap cleanup EXIT
 
 if [ ! -f "$BASE_IMAGE" ]; then
     echo "downloading base cloud image for $ARCH..."
