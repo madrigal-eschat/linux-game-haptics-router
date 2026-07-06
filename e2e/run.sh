@@ -55,6 +55,10 @@ else
         "$WORK_DIR/user-data" "$WORK_DIR/meta-data"
 fi
 
+if [ ! -e /dev/kvm ]; then
+    echo "warning: /dev/kvm not present on this host — qemu -enable-kvm will fail to start" >&2
+fi
+
 SSH_PORT=10222
 "$QEMU_BIN" \
     -m 2048 -smp 2 -enable-kvm -nographic \
@@ -75,6 +79,9 @@ for _ in $(seq 1 60); do
 done
 if ! ssh "${SSH_OPTS[@]}" e2e@127.0.0.1 true 2>/dev/null; then
     echo "VM never became SSH-reachable" >&2
+    echo "--- qemu.log ---" >&2
+    cat "$WORK_DIR/qemu.log" >&2 || true
+    echo "--- end qemu.log ---" >&2
     exit 1
 fi
 
