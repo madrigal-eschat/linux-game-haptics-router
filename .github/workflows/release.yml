@@ -5,6 +5,11 @@ name: Release
 # cargo-edit, updates CHANGELOG.md, commits, tags (vX.Y.Z), and publishes a
 # GitHub Release with generated notes. Tagging that release is what triggers
 # build-release.yml to attach platform binaries to it.
+#
+# Requires a `RELEASE_TOKEN` repo secret (PAT with `repo` scope, or a GitHub
+# App installation token). Tags/commits pushed with the default GITHUB_TOKEN
+# do NOT trigger other workflows (GitHub's anti-recursion guard), so
+# build-release.yml would never fire on the tag this job creates.
 on:
   push:
     branches: [main]
@@ -26,6 +31,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: true
+          token: ${{ secrets.RELEASE_TOKEN }}
 
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo install cargo-edit --locked
@@ -44,4 +50,4 @@ jobs:
 
       - run: npx semantic-release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}

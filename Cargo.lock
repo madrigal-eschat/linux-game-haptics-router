@@ -1029,7 +1029,7 @@ dependencies = [
 
 [[package]]
 name = "haptics-probe"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "aya",
@@ -1048,14 +1048,14 @@ dependencies = [
 
 [[package]]
 name = "haptics-probe-common"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "bson",
 ]
 
 [[package]]
 name = "haptics-probe-ebpf"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "aya-ebpf",
  "aya-log-ebpf",
