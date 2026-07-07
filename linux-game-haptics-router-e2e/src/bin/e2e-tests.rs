@@ -172,9 +172,16 @@ async fn main() -> Result<()> {
             .context("daemon stderr not piped")?,
     );
     let mut daemon = DaemonGuard(daemon_child);
-    // The daemon connects to the fake server, then opens the evdev device
-    // and starts reading FF events — give it a moment before issuing gestures.
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    // The daemon connects to the fake server, opens the evdev device, and
+    // starts polling the eBPF ring buffer for uploaded effects — give it a
+    // moment before issuing gestures. 1500ms (not 500ms): CI runs showed the
+    // very first scenario losing the inherent upload-vs-play race (see the
+    // note at each upload_ff_effect call site below) specifically because
+    // the ring-buffer poller's first read is measurably slower than its
+    // steady-state reads; every later scenario's race resolves fine once
+    // that task is warm. This is a startup warm-up delay, not a workaround
+    // for the acknowledged per-scenario race itself.
+    tokio::time::sleep(Duration::from_millis(1500)).await;
 
     let mut game_dev =
         Device::open(&gamepad.device_node).context("opening virtual gamepad as \"the game\"")?;

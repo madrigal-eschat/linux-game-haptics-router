@@ -21,6 +21,18 @@ pub fn spawn_fake_gamepad(name: &str) -> Result<FakeGamepad> {
             FFEffectType::FF_PERIODIC,
             FFEffectType::FF_CONSTANT,
             FFEffectType::FF_RAMP,
+            // The kernel's FF_PERIODIC validation (input_ff_upload in
+            // drivers/input/ff-core.c) checks the specific waveform bit
+            // against the same capability bitmap as the effect-type bits
+            // above, not just FF_PERIODIC itself — an upload with a waveform
+            // whose bit isn't advertised here fails EVIOCSFF with EINVAL
+            // even though FF_PERIODIC is advertised. Advertise every
+            // standard (non-custom) waveform so any periodic scenario works.
+            FFEffectType::FF_SQUARE,
+            FFEffectType::FF_TRIANGLE,
+            FFEffectType::FF_SINE,
+            FFEffectType::FF_SAW_UP,
+            FFEffectType::FF_SAW_DOWN,
         ]))
         .context("advertising FF effect types")?
         .with_ff_effects_max(16)
