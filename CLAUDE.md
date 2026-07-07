@@ -63,6 +63,25 @@ sudo ./target/debug/game-haptics-router --ws-url ws://127.0.0.1:12345 --scale 0.
   --device-map '{"usb-0000:00:14.0-1/input0": [0,1]}'
 ```
 
+## End-to-end test
+
+`e2e/run.sh` boots a QEMU VM matching the host arch, deploys the built
+`game-haptics-router` daemon plus a test harness binary (`e2e-tests`, in the
+`linux-game-haptics-router-e2e` crate) into it, and runs a smoke-set of FF
+gestures against a virtual gamepad (via `evdev`'s uinput support) and an
+in-process fake buttplug server, asserting two 250ms timing bounds: command
+dispatch latency, and final zero-magnitude ("stop") command latency
+relative to the gesture's expected end time.
+
+```bash
+./e2e/run.sh
+```
+
+Requires QEMU with KVM and `cloud-image-utils` (for `cloud-localds`) on the
+host. `linux-game-haptics-router-e2e` is excluded from the default
+`cargo build/test --workspace` the same way the ebpf crate is — it needs
+`/dev/uinput` and root, which a plain dev shell doesn't have.
+
 ## Data flow / architecture notes
 
 1. **eBPF side** (`linux-game-haptics-router-ebpf/src/main.rs`): on

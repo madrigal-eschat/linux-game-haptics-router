@@ -136,7 +136,7 @@ dependencies = [
  "object",
  "once_cell",
  "scopeguard",
- "thiserror",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -204,7 +204,7 @@ dependencies = [
  "aya",
  "aya-log-common",
  "log",
- "thiserror",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -258,7 +258,7 @@ dependencies = [
  "bytes",
  "log",
  "object",
- "thiserror",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -337,7 +337,7 @@ dependencies = [
  "rand",
  "serde_bytes",
  "simdutf8",
- "thiserror",
+ "thiserror 2.0.18",
  "time",
  "uuid",
 ]
@@ -374,7 +374,7 @@ dependencies = [
  "serde_json",
  "strum",
  "strum_macros",
- "thiserror",
+ "thiserror 2.0.18",
  "tokio",
  "tracing",
 ]
@@ -402,7 +402,7 @@ dependencies = [
  "smallvec",
  "strum",
  "strum_macros",
- "thiserror",
+ "thiserror 2.0.18",
  "tokio",
  "tracing",
 ]
@@ -425,7 +425,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_repr",
- "thiserror",
+ "thiserror 2.0.18",
  "tokio",
  "tokio-tungstenite",
  "tracing",
@@ -475,7 +475,7 @@ dependencies = [
  "semver",
  "serde",
  "serde_json",
- "thiserror",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -665,7 +665,7 @@ version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "10d60334b3b2e7c9d91ef8150abfb6fa4c1c39ebbcf4a81c2e346aad939fee3e"
 dependencies = [
- "thiserror",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -808,6 +808,19 @@ dependencies = [
 
 [[package]]
 name = "evdev"
+version = "0.12.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ab6055a93a963297befb0f4f6e18f314aec9767a4bbe88b151126df2433610a7"
+dependencies = [
+ "bitvec",
+ "cfg-if",
+ "libc",
+ "nix 0.23.2",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "evdev"
 version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "25b686663ba7f08d92880ff6ba22170f1df4e83629341cba34cf82cd65ebea99"
@@ -815,7 +828,7 @@ dependencies = [
  "bitvec",
  "cfg-if",
  "libc",
- "nix",
+ "nix 0.29.0",
 ]
 
 [[package]]
@@ -1300,7 +1313,7 @@ dependencies = [
  "buttplug",
  "clap",
  "env_logger",
- "evdev",
+ "evdev 0.13.2",
  "linux-game-haptics-router-common",
  "log",
  "serde",
@@ -1313,6 +1326,21 @@ name = "linux-game-haptics-router-common"
 version = "0.1.1"
 dependencies = [
  "bson",
+]
+
+[[package]]
+name = "linux-game-haptics-router-e2e"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "buttplug_core",
+ "env_logger",
+ "evdev 0.12.2",
+ "futures-util",
+ "log",
+ "serde_json",
+ "tokio",
+ "tokio-tungstenite",
 ]
 
 [[package]]
@@ -1352,6 +1380,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "88904434abc2901f197fe8cc55f0445e7ded921dba5911dad2e2b39b48e663c4"
 
 [[package]]
+name = "memoffset"
+version = "0.6.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5aa361d4faea93603064a027415f07bd8e1d5c88c9fbf68bf56a285428fd79ce"
+dependencies = [
+ "autocfg",
+]
+
+[[package]]
 name = "mio"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1360,6 +1397,19 @@ dependencies = [
  "libc",
  "wasi",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "nix"
+version = "0.23.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8f3790c00a0150112de0f4cd161e3d7fc4b2d8a5542ffc35f099a2562aecb35c"
+dependencies = [
+ "bitflags 1.3.2",
+ "cc",
+ "cfg-if",
+ "libc",
+ "memoffset",
 ]
 
 [[package]]
@@ -2023,11 +2073,31 @@ checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
 
 [[package]]
 name = "thiserror"
+version = "1.0.69"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b6aaf5339b578ea85b50e080feb250a3e8ae8cfcdff9a461c9ec2904bc923f52"
+dependencies = [
+ "thiserror-impl 1.0.69",
+]
+
+[[package]]
+name = "thiserror"
 version = "2.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4288b5bcbc7920c07a1149a35cf9590a2aa808e0bc1eafaade0b80947865fbc4"
 dependencies = [
- "thiserror-impl",
+ "thiserror-impl 2.0.18",
+]
+
+[[package]]
+name = "thiserror-impl"
+version = "1.0.69"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4fee6c4efc90059e10f81e6d42c60a18f76588c3d74cb83a0b242a2b6c7504c1"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -2181,7 +2251,7 @@ dependencies = [
  "rustls",
  "rustls-pki-types",
  "sha1",
- "thiserror",
+ "thiserror 2.0.18",
  "url",
  "utf-8",
 ]

@@ -1,0 +1,8 @@
+#cloud-config
+users:
+  - name: e2e
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - __SSH_PUBKEY__
+ssh_pwauth: false

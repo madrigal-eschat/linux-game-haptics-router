@@ -1,5 +1,7 @@
 /target
 **/target
+/.worktrees
+/.superpowers
 
 # IDE
 .idea/
