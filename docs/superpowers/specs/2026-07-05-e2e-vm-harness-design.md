@@ -112,25 +112,24 @@ skew to account for.
 
 ## CI wiring
 
-- New job in `.github/workflows/ci.yml`, matrixed over host arch so the VM
-  arch always matches the runner arch:
-  - `runs-on: ubuntu-latest` (x86_64) — confirmed to expose `/dev/kvm`;
-    boots KVM-accelerated.
-  - `runs-on: ubuntu-24.04-arm` (aarch64) — confirmed at CI implementation
-    time to have **no** `/dev/kvm` on this GitHub-hosted runner class.
-    `run.sh` falls back to TCG software emulation on this leg (amended from
-    the original no-emulation constraint, by explicit decision, since no
-    KVM-capable GitHub-hosted arm runner currently exists). This leg's VM
-    boot is consequently much slower; the job's `timeout-minutes` and the
-    SSH-readiness retry budget are both sized generously to accommodate it.
-    `fail-fast: false` on the matrix so a failure/slowness on one arch leg
-    doesn't cancel the other.
-  `run.sh` picks the matching cloud image + qemu binary
-  (`qemu-system-x86_64` / `qemu-system-aarch64`) based on `uname -m`,
-  mirroring the `target` matrix already in `build-release.yml`.
-  Each matrix leg builds its own release binaries via existing build steps,
-  then runs `e2e/run.sh`, with a job-level `timeout-minutes` as a second
-  backstop above the in-script SSH timeout.
+- New job in `.github/workflows/ci.yml`, `runs-on: ubuntu-latest` (x86_64) —
+  confirmed to expose `/dev/kvm`; boots KVM-accelerated.
+- **aarch64 (`ubuntu-24.04-arm`) dropped from CI** (amended after the
+  original design and CI implementation): GitHub-hosted aarch64 runners
+  were confirmed to have **no** `/dev/kvm`, forcing the VM to boot under
+  TCG software emulation. `run.sh` still supports this as a fallback
+  (`/dev/kvm` presence check, `-cpu max` instead of `-cpu host`) since the
+  VM-arch-matches-host-arch design itself is unaffected, but a ~30-minute
+  emulated boot is both too slow to fit a CI job budget and too jittery for
+  this suite's 250ms timing assertions to mean anything — so the matrix leg
+  is commented out (not deleted) in `ci.yml` pending a KVM-capable
+  GitHub-hosted arm runner.
+  `run.sh` still picks the matching cloud image + qemu binary
+  (`qemu-system-x86_64` / `qemu-system-aarch64`) based on `uname -m`, so
+  running it locally on an aarch64 dev machine with real KVM access works
+  fine — only the CI *job* for that arch is disabled.
+- `run.sh` build/run via existing build steps, with a job-level
+  `timeout-minutes` as a second backstop above the in-script SSH timeout.
 - Local dev: identical `e2e/run.sh` invocation on whatever arch the
   developer is on, no CI-specific branching beyond where the base cloud
   image is cached.

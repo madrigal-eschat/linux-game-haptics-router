@@ -102,11 +102,14 @@ jobs:
       matrix:
         include:
           - runner: ubuntu-latest
-          - runner: ubuntu-24.04-arm
+          # ubuntu-24.04-arm dropped: GitHub-hosted aarch64 runners have no
+          # /dev/kvm, so the VM only boots under TCG software emulation —
+          # too slow and too jittery for this suite's 250ms timing
+          # assertions to mean anything. Re-add once GitHub offers a
+          # KVM-capable arm runner.
+          # - runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
-    # 30 (not 20): the aarch64 runner has no KVM, so its VM boots under much
-    # slower TCG software emulation.
-    timeout-minutes: 30
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/rust-bpf-setup
