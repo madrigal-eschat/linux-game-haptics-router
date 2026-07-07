@@ -33,10 +33,12 @@ resolution logic:
    proactively (rather than only reactively on id reuse) and to correctly
    drop a pending play waiting on an effect that's been erased out from
    under it.
-
-Out of scope: fixing the e2e harness itself (already merged, separate
-branch) — though re-running it against this fix is a natural validation
-step, not a blocking part of this branch's own tests.
+3. **E2E harness validation, in scope**: re-run `e2e/run.sh` against this
+   fix and confirm `ff_rumble`'s first-scenario race no longer reproduces.
+   If confirmed fixed, remove the "known flaky failure" caveat this fix's
+   predecessor branch added to `README.md` (and the corresponding note in
+   `CLAUDE.md` if one exists) — the daemon fix obsoletes it, so the
+   documented caveat should not linger once it's no longer true.
 
 ## eBPF probe changes
 
@@ -158,7 +160,9 @@ devices (small), so no unbounded growth and no timeout/cleanup task needed.
   - Play-with-immediate-match still processes immediately (regression
     check — existing behavior unchanged) and clears any stale pending
     entry defensively.
-- Manual/e2e validation: re-run `e2e/run.sh` against this fix as a sanity
-  check that `ff_rumble`'s first-scenario race no longer reproduces — not
-  a blocking requirement of this branch's own test suite, since the e2e
-  harness lives in a separate, already-merged branch.
+- **E2E validation (in scope, required before merge):** re-run
+  `e2e/run.sh` against the built daemon on this branch and confirm all 5
+  scenarios pass, including `ff_rumble`'s first-scenario race no longer
+  reproducing. On confirmation, remove the "known flaky failure" caveat
+  from `README.md`'s End-to-end tests section (and `CLAUDE.md` if it
+  duplicates the note).
