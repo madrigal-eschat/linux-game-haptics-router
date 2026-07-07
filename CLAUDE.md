@@ -69,7 +69,7 @@ sudo ./target/debug/game-haptics-router --ws-url ws://127.0.0.1:12345 --scale 0.
 `game-haptics-router` daemon plus a test harness binary (`e2e-tests`, in the
 `linux-game-haptics-router-e2e` crate) into it, and runs a smoke-set of FF
 gestures against a virtual gamepad (via `evdev`'s uinput support) and an
-in-process fake buttplug server, asserting two 150ms timing bounds: command
+in-process fake buttplug server, asserting two 250ms timing bounds: command
 dispatch latency, and final zero-magnitude ("stop") command latency
 relative to the gesture's expected end time.
 

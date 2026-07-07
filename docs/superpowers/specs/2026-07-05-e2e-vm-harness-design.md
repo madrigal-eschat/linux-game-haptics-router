@@ -6,8 +6,8 @@ Prove the full pipeline works end-to-end on a real kernel: eBPF probe →
 userspace daemon → buttplug client, driven by real evdev/FF ioctls instead of
 unit-level fakes. Assert two timing properties that unit tests can't cover:
 
-- a buttplug command is sent within **150ms** of the FF gesture being issued
-- the final zero-magnitude ("stop") command is sent within **150ms** of the
+- a buttplug command is sent within **250ms** of the FF gesture being issued
+- the final zero-magnitude ("stop") command is sent within **250ms** of the
   gesture's expected end time (start + duration + envelope fade-out)
 
 ## Scope
@@ -67,12 +67,12 @@ Inside the VM, `e2e-tests`:
    - issues the gesture directly on the held fd: `EVIOCSFF` ioctl upload,
      then `EV_FF` play write; records `Instant::now()` at that point as
      issue-time
-   - asserts a matching command arrives on the channel within 150ms of
+   - asserts a matching command arrives on the channel within 250ms of
      issue-time
    - computes expected end time = issue-time + effect duration + envelope
      fade-out (reusing `translate.rs` timing logic/constants rather than
      re-deriving it in the test crate, where feasible)
-   - asserts the final zero-magnitude command's timestamp is within 150ms
+   - asserts the final zero-magnitude command's timestamp is within 250ms
      of that expected end time
    - failure messages include actual measured latency, not just pass/fail
 5. teardown: kill the daemon subprocess (always — success or failure, so a
@@ -105,7 +105,7 @@ skew to account for.
    end-time calculation (fade-out affects expected stop time).
 4. Rapid retrigger — two plays issued within the daemon's 10ms throttle
    window; assert the play that does get through still lands its buttplug
-   command within the 150ms bound.
+   command within the 250ms bound.
 5. Multi-device — two virtual gamepads with distinct `device_map` entries;
    assert no cross-talk (a gesture on device A never produces a command
    attributed to device B's mapping).

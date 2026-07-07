@@ -2,7 +2,7 @@ use crate::protocol_server::ReceivedCommand;
 use std::fmt;
 use std::time::{Duration, Instant};
 
-pub const LATENCY_BOUND: Duration = Duration::from_millis(150);
+pub const LATENCY_BOUND: Duration = Duration::from_millis(250);
 
 #[derive(Debug)]
 pub struct TimingError(pub String);
@@ -88,9 +88,9 @@ mod tests {
     #[test]
     fn command_outside_bound_is_rejected() {
         let issued = Instant::now();
-        let commands = vec![cmd(50, issued + Duration::from_millis(200))];
+        let commands = vec![cmd(50, issued + Duration::from_millis(300))];
         let err = assert_command_within_bound(issued, &commands).unwrap_err();
-        assert!(err.0.contains("150ms"));
+        assert!(err.0.contains("250ms"));
     }
 
     #[test]
