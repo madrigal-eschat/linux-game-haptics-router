@@ -106,8 +106,15 @@ async fn main() -> Result<()> {
             _ = rescan_interval.tick() => {
                 app.rescan_devices();
             }
-            Some(uploaded) = effect_rx.recv() => {
-                app.handle_effect_uploaded(uploaded);
+            Some(msg) = effect_rx.recv() => {
+                match msg {
+                    ebpf::ProbeEventMsg::Uploaded(uploaded) => {
+                        app.handle_effect_uploaded(uploaded).await;
+                    }
+                    ebpf::ProbeEventMsg::Erased { tgid, effect_id } => {
+                        app.handle_effect_erased(tgid, effect_id).await;
+                    }
+                }
             }
             Some((device_id, ev)) = ff_rx.recv() => {
                 app.handle_ff_event(device_id, ev).await;
