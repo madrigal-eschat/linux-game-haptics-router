@@ -42,7 +42,7 @@ pub struct Envelope {
 }
 
 /// Captured effect data — stored in eBPF map, read by userspace
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 #[repr(C)]
 pub struct FfEffect {
     pub kind: u16,
@@ -125,11 +125,28 @@ pub const fn eviocsff_nr() -> u32 {
     (1u32 << 30) | ((KERNEL_FF_EFFECT_SIZE & 0x3fff) << 16) | (0x45u32 << 8) | 0x80u32
 }
 
-/// Event emitted from eBPF ring buffer to userspace
+/// Compute EVIOCRMFF ioctl number at compile time.
+/// #define EVIOCRMFF _IOW('E', 0x81, int)
+/// = (1<<30) | (size_of::<i32>()<<16) | ('E'<<8) | 0x81
+pub const fn eviocrmff_nr() -> u32 {
+    (1u32 << 30) | ((4u32 & 0x3fff) << 16) | (0x45u32 << 8) | 0x81u32
+}
+
+/// `ProbeEvent.kind` discriminant: this event is a freshly-uploaded effect
+/// (the existing, original event shape — `effect` is meaningful).
+pub const PROBE_EVENT_KIND_UPLOADED: u8 = 0;
+/// `ProbeEvent.kind` discriminant: this event is an erased effect (freed via
+/// `EVIOCRMFF`) — `effect` is unused/zeroed, only `tgid`/`effect_id` matter.
+pub const PROBE_EVENT_KIND_ERASED: u8 = 1;
+
+/// Event emitted from eBPF ring buffer to userspace. `kind` distinguishes
+/// an upload (`PROBE_EVENT_KIND_UPLOADED`, `effect` meaningful) from an
+/// erase (`PROBE_EVENT_KIND_ERASED`, `effect` zeroed/unused).
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct ProbeEvent {
-    /// Process group ID of the process that uploaded the effect
+    pub kind: u8,
+    /// Process group ID of the process that uploaded (or erased) the effect
     pub tgid: u32,
     /// Assigned effect id
     pub effect_id: i16,
@@ -182,5 +199,32 @@ mod tests {
         assert_eq!(FF_PERIODIC, 0x51);
         assert_eq!(FF_CONSTANT, 0x52);
         assert_eq!(FF_RAMP, 0x57);
+    }
+
+    #[test]
+    fn ff_effect_default_is_zeroed() {
+        let e = FfEffect::default();
+        assert_eq!(e.kind, 0);
+        assert_eq!(e.id, 0);
+        assert_eq!(e.direction, 0);
+        assert_eq!(e.trigger_button, 0);
+        assert_eq!(e.trigger_interval, 0);
+        assert_eq!(e.replay_length, 0);
+        assert_eq!(e.replay_delay, 0);
+        assert_eq!(e.u, [0u16; 7]);
+    }
+
+    // Derived from the kernel uapi macro `#define EVIOCRMFF _IOW('E', 0x81, int)`
+    // rather than a live strace (unlike eviocsff_nr_matches_strace_verified_value,
+    // which was strace-verified against a real game) — re-derive against a live
+    // strace of an EVIOCRMFF call if this ever needs re-verifying.
+    #[test]
+    fn eviocrmff_nr_matches_the_ioc_write_e_0x81_int_macro_definition() {
+        assert_eq!(eviocrmff_nr(), 0x4004_4581);
+    }
+
+    #[test]
+    fn probe_event_kind_constants_are_distinct() {
+        assert_ne!(PROBE_EVENT_KIND_UPLOADED, PROBE_EVENT_KIND_ERASED);
     }
 }
