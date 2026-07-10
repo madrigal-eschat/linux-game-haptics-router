@@ -341,11 +341,13 @@ mod tests {
 
     // FF_RUMBLE with nonzero magnitude — unlike dummy_effect() (kind: 0),
     // translate::translate() produces points for this one, so process_play
-    // actually reaches schedule_sequence.
-    fn rumble_effect() -> FfEffect {
+    // actually reaches schedule_sequence. `id` must match the effect_id a
+    // test plays, since Play lookup matches on the stored effect's own `id`
+    // field (see handle_ff_event), not the effect_store map key.
+    fn rumble_effect(id: i16) -> FfEffect {
         FfEffect {
             kind: linux_game_haptics_router_common::FF_RUMBLE,
-            id: 0,
+            id,
             direction: 0,
             trigger_button: 0,
             trigger_interval: 0,
@@ -492,7 +494,7 @@ mod tests {
         app.handle_effect_uploaded(EffectUploaded {
             tgid: 1,
             effect_id: 5,
-            effect: rumble_effect(),
+            effect: rumble_effect(5),
         })
         .await;
         assert!(app.pending_plays.is_empty());
@@ -514,7 +516,7 @@ mod tests {
         app.handle_effect_uploaded(EffectUploaded {
             tgid: 1,
             effect_id: 5,
-            effect: rumble_effect(),
+            effect: rumble_effect(5),
         })
         .await;
         assert!(app.pending_plays.is_empty());
@@ -540,7 +542,7 @@ mod tests {
         app.handle_effect_uploaded(EffectUploaded {
             tgid: 1,
             effect_id: 5,
-            effect: rumble_effect(),
+            effect: rumble_effect(5),
         })
         .await;
         assert!(fake.scheduled.lock().await.is_empty());
@@ -564,7 +566,7 @@ mod tests {
         app.handle_effect_uploaded(EffectUploaded {
             tgid: 1,
             effect_id: 5,
-            effect: rumble_effect(),
+            effect: rumble_effect(5),
         })
         .await;
         app.handle_ff_event("dev-a".to_string(), FfEvent::Play { effect_id: 5 })
