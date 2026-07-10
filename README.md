@@ -123,21 +123,3 @@ needs root, same as [Usage](#usage) above.
 real daemon, a virtual FF gamepad, and an in-process fake buttplug server)
 against a handful of gesture scenarios. See [CLAUDE.md](CLAUDE.md#end-to-end-test)
 for details.
-
-**Known flaky failure:** the `ff_rumble` scenario — specifically only the
-very first gesture issued after the daemon starts — intermittently fails
-with "no matching effect in store" on the daemon side. Root cause: the
-daemon learns about an uploaded FF effect via two independent, unsynchronized
-paths — the eBPF ring buffer (upload notification: kernel ring buffer →
-epoll → tokio `AsyncFd` → channel → app select loop) and the evdev reader
-(play notification: a blocking `fetch_events()` read in its own OS thread,
-which wakes on data almost immediately). The evdev path is structurally
-faster. Every scenario after the first has enough idle time beforehand
-(the previous scenario's wind-down) that the ring-buffer path catches up
-before the next gesture's play write arrives; the very first gesture is
-issued immediately after daemon startup with no such gap, so it can lose
-that race. A fix needs the daemon itself to either add deliberate slop
-between the two paths or unify effect-upload and play detection onto a
-single ordering-guaranteed path (e.g. observing both via eBPF). Not yet
-fixed — tracked as a known issue in the e2e suite rather than blocking
-this branch on it.
