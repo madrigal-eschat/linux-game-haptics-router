@@ -115,6 +115,37 @@ compile_error!(
 /// number won't match what userspace actually issues.
 const KERNEL_FF_EFFECT_SIZE: u32 = 48;
 
+// Linux ioctl number encoding (see uapi `asm-generic/ioctl.h`): a 32-bit
+// value packed as `dir:2 | size:14 | type:8 | nr:8`, built by the kernel's
+// `_IOC`/`_IOW` macros. The four pieces below name every field that goes
+// into that packing so `eviocsff_nr`/`eviocrmff_nr` don't spell out raw
+// hex/shift magic.
+
+/// `_IOC_WRITE` direction bit (bit 30): userspace writes data to the
+/// kernel via this ioctl (both EVIOCSFF and EVIOCRMFF do).
+const IOC_DIR_WRITE: u32 = 1u32 << 30;
+
+/// Mask for the 14-bit `size` field (bits 16..30) that `_IOC` packs the
+/// ioctl's argument size into.
+const IOC_SIZE_MASK: u32 = 0x3fff;
+
+/// `_IOC_TYPE` magic byte (bits 8..16) both evdev FF ioctls share: ASCII
+/// `'E'`, the "type" the kernel groups all evdev ioctls under.
+const IOC_TYPE_EVDEV: u32 = 0x45;
+
+/// `_IOC_NR` sequence byte (bits 0..8) the kernel assigned to `EVIOCSFF`
+/// in `uapi/linux/input.h`.
+const EVIOCSFF_NR_BYTE: u32 = 0x80;
+
+/// `_IOC_NR` sequence byte (bits 0..8) the kernel assigned to `EVIOCRMFF`
+/// in `uapi/linux/input.h`.
+const EVIOCRMFF_NR_BYTE: u32 = 0x81;
+
+/// `EVIOCRMFF`'s argument is a plain `int` (the effect id itself, not a
+/// pointer — see `uapi/linux/input.h`'s `#define EVIOCRMFF _IOW('E', 0x81,
+/// int)`), so its encoded size is `sizeof(c_int)`, not a struct size.
+const EVIOCRMFF_ARG_SIZE: u32 = 4;
+
 /// Compute EVIOCSFF ioctl number at compile time.
 /// #define EVIOCSFF _IOC(_IOC_WRITE, 'E', 0x80, sizeof(struct ff_effect))
 /// = (1<<30) | (size<<16) | ('E'<<8) | 0x80
@@ -122,14 +153,20 @@ const KERNEL_FF_EFFECT_SIZE: u32 = 48;
 /// confirms 'E'=0x45 and size=48 were already right; only the nr byte
 /// (0x80, not 0x52) was wrong)
 pub const fn eviocsff_nr() -> u32 {
-    (1u32 << 30) | ((KERNEL_FF_EFFECT_SIZE & 0x3fff) << 16) | (0x45u32 << 8) | 0x80u32
+    IOC_DIR_WRITE
+        | ((KERNEL_FF_EFFECT_SIZE & IOC_SIZE_MASK) << 16)
+        | (IOC_TYPE_EVDEV << 8)
+        | EVIOCSFF_NR_BYTE
 }
 
 /// Compute EVIOCRMFF ioctl number at compile time.
 /// #define EVIOCRMFF _IOW('E', 0x81, int)
 /// = (1<<30) | (size_of::<i32>()<<16) | ('E'<<8) | 0x81
 pub const fn eviocrmff_nr() -> u32 {
-    (1u32 << 30) | ((4u32 & 0x3fff) << 16) | (0x45u32 << 8) | 0x81u32
+    IOC_DIR_WRITE
+        | ((EVIOCRMFF_ARG_SIZE & IOC_SIZE_MASK) << 16)
+        | (IOC_TYPE_EVDEV << 8)
+        | EVIOCRMFF_NR_BYTE
 }
 
 /// `ProbeEvent.kind` discriminant: this event is a freshly-uploaded effect
