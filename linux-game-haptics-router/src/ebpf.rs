@@ -2,7 +2,7 @@ use anyhow::Result;
 use aya::maps::RingBuf;
 use aya::programs::TracePoint;
 use aya::{include_bytes_aligned, Ebpf};
-use linux_game_haptics_router_common::ProbeEvent;
+use linux_game_haptics_router_common::{ProbeEvent, PROBE_EVENT_KIND_ERASED};
 use tokio::io::unix::AsyncFd;
 use tokio::sync::mpsc;
 
@@ -13,8 +13,17 @@ pub struct EffectUploaded {
     pub effect: linux_game_haptics_router_common::FfEffect,
 }
 
-/// Load and attach the eBPF program. Returns a receiver for effect-upload events.
-pub async fn load_probe() -> Result<(Ebpf, mpsc::Receiver<EffectUploaded>)> {
+/// A decoded ring-buffer message: either a freshly-uploaded effect or an
+/// erase of one, distinguished by `ProbeEvent.kind` on the wire.
+#[derive(Debug)]
+pub enum ProbeEventMsg {
+    Uploaded(EffectUploaded),
+    Erased { tgid: u32, effect_id: i16 },
+}
+
+/// Load and attach the eBPF program. Returns a receiver for probe events
+/// (both effect uploads and effect erasures).
+pub async fn load_probe() -> Result<(Ebpf, mpsc::Receiver<ProbeEventMsg>)> {
     let bpf_bytes =
         include_bytes_aligned!(concat!(env!("OUT_DIR"), "/linux-game-haptics-router-ebpf"));
 
@@ -56,17 +65,31 @@ pub async fn load_probe() -> Result<(Ebpf, mpsc::Receiver<EffectUploaded>)> {
                 }
                 let event: ProbeEvent =
                     unsafe { std::ptr::read_unaligned(bytes.as_ptr() as *const ProbeEvent) };
-                log::info!(
-                    "ring buffer: effect uploaded tgid={} effect_id={} kind={}",
-                    event.tgid,
-                    event.effect_id,
-                    event.effect.kind
-                );
-                let _ = tx.try_send(EffectUploaded {
-                    tgid: event.tgid,
-                    effect_id: event.effect_id,
-                    effect: event.effect,
-                });
+
+                let msg = if event.kind == PROBE_EVENT_KIND_ERASED {
+                    log::info!(
+                        "ring buffer: effect erased tgid={} effect_id={}",
+                        event.tgid,
+                        event.effect_id
+                    );
+                    ProbeEventMsg::Erased {
+                        tgid: event.tgid,
+                        effect_id: event.effect_id,
+                    }
+                } else {
+                    log::info!(
+                        "ring buffer: effect uploaded tgid={} effect_id={} kind={}",
+                        event.tgid,
+                        event.effect_id,
+                        event.effect.kind
+                    );
+                    ProbeEventMsg::Uploaded(EffectUploaded {
+                        tgid: event.tgid,
+                        effect_id: event.effect_id,
+                        effect: event.effect,
+                    })
+                };
+                let _ = tx.try_send(msg);
             }
             guard.clear_ready();
         }

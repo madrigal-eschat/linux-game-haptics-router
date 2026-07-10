@@ -8,6 +8,7 @@ name = "game-haptics-router"
 path = "src/main.rs"
 
 [dependencies]
+async-trait    = "0.1"
 aya            = "0.14"
 aya-log        = "0.3"
 linux-game-haptics-router-common = { path = "../linux-game-haptics-router-common", features = ["user"] }
