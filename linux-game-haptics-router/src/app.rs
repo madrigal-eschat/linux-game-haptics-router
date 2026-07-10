@@ -3,7 +3,6 @@ use crate::ebpf::EffectUploaded;
 use crate::playback::PlaybackOps;
 use crate::throttle::Throttle;
 use crate::translate;
-use crate::translate::HapticPoint;
 use linux_game_haptics_router_common::FfEffect;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -311,6 +310,7 @@ fn take_all_pending_matching_effect(
 mod tests {
     use super::*;
     use crate::playback::PlaybackOps;
+    use crate::translate::HapticPoint;
     use async_trait::async_trait;
     use tokio::sync::Mutex as TokioMutex;
 
