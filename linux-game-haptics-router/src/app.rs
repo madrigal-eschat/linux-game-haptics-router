@@ -1,8 +1,9 @@
 use crate::device::{self, DeviceInfo, FfEvent};
 use crate::ebpf::EffectUploaded;
-use crate::playback::Playback;
+use crate::playback::PlaybackOps;
 use crate::throttle::Throttle;
 use crate::translate;
+use crate::translate::HapticPoint;
 use linux_game_haptics_router_common::FfEffect;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -13,7 +14,7 @@ use tokio::sync::mpsc;
 /// set of evdev devices we've already spawned readers for, and the haptic
 /// throttle. Playback itself still owns the buttplug connection.
 pub struct App {
-    playback: Arc<Playback>,
+    playback: Arc<dyn PlaybackOps>,
     effect_store: HashMap<(u32, i16), FfEffect>,
     pending_plays: HashMap<String, PendingPlay>,
     known_devices: HashMap<String, String>, // device_id -> path
@@ -32,7 +33,7 @@ struct PendingPlay {
 }
 
 impl App {
-    pub fn new(playback: Arc<Playback>, ff_tx: mpsc::Sender<(String, FfEvent)>) -> Self {
+    pub fn new(playback: Arc<dyn PlaybackOps>, ff_tx: mpsc::Sender<(String, FfEvent)>) -> Self {
         Self {
             playback,
             effect_store: HashMap::new(),
@@ -87,8 +88,8 @@ impl App {
             uploaded.effect,
         );
 
-        if let Some((device_id, pending)) =
-            take_pending_matching_effect(&mut self.pending_plays, uploaded.effect_id)
+        for (device_id, pending) in
+            take_all_pending_matching_effect(&mut self.pending_plays, uploaded.effect_id)
         {
             log::info!(
                 "pending play effect_id={} on {} resolved after {:?}",
@@ -283,24 +284,6 @@ fn take_pending_for_device(
     pending.remove(device_id)
 }
 
-/// Find, remove, and return the (device_id, pending play) pair whose
-/// effect_id matches, if any. Pending plays don't carry a tgid (Play events
-/// off evdev don't expose one — matching by id-only mirrors the same
-/// tgid-agnostic convention `effect_store` lookups already use), so if two
-/// different devices' pending plays happened to share the same numeric
-/// effect_id, only one (arbitrary) match is resolved here — an inherent
-/// limitation of the existing id-only matching convention, not new.
-fn take_pending_matching_effect(
-    pending: &mut HashMap<String, PendingPlay>,
-    effect_id: i16,
-) -> Option<(String, PendingPlay)> {
-    let device_id = pending
-        .iter()
-        .find(|(_, p)| p.effect_id == effect_id)
-        .map(|(device_id, _)| device_id.clone())?;
-    pending.remove(&device_id).map(|p| (device_id, p))
-}
-
 /// Find, remove, and return every (device_id, pending play) pair whose
 /// effect_id matches. Used for erase: unlike upload resolution (which only
 /// ever needs to resolve one specific device's play), an erase should clear
@@ -327,6 +310,50 @@ fn take_all_pending_matching_effect(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::playback::PlaybackOps;
+    use async_trait::async_trait;
+    use tokio::sync::Mutex as TokioMutex;
+
+    #[derive(Default)]
+    struct FakePlayback {
+        scheduled: TokioMutex<Vec<(String, usize)>>,
+        stopped: TokioMutex<Vec<String>>,
+        stopped_all: TokioMutex<bool>,
+    }
+
+    #[async_trait]
+    impl PlaybackOps for FakePlayback {
+        async fn schedule_sequence(&self, device_id: String, points: Vec<HapticPoint>) {
+            self.scheduled.lock().await.push((device_id, points.len()));
+        }
+        async fn stop(&self, device_id: &str) {
+            self.stopped.lock().await.push(device_id.to_string());
+        }
+        async fn stop_all(&self) {
+            *self.stopped_all.lock().await = true;
+        }
+    }
+
+    fn test_app(fake: Arc<FakePlayback>) -> App {
+        let (ff_tx, _ff_rx) = mpsc::channel(1);
+        App::new(fake, ff_tx)
+    }
+
+    // FF_RUMBLE with nonzero magnitude — unlike dummy_effect() (kind: 0),
+    // translate::translate() produces points for this one, so process_play
+    // actually reaches schedule_sequence.
+    fn rumble_effect() -> FfEffect {
+        FfEffect {
+            kind: linux_game_haptics_router_common::FF_RUMBLE,
+            id: 0,
+            direction: 0,
+            trigger_button: 0,
+            trigger_interval: 0,
+            replay_length: 100,
+            replay_delay: 0,
+            u: [0xffffu16, 0xffff, 0, 0, 0, 0, 0],
+        }
+    }
 
     fn dummy_effect() -> FfEffect {
         FfEffect {
@@ -423,26 +450,6 @@ mod tests {
     }
 
     #[test]
-    fn take_pending_matching_effect_finds_by_id_not_device() {
-        let mut pending = HashMap::new();
-        pending.insert("dev-a".to_string(), pending_play(5));
-        pending.insert("dev-b".to_string(), pending_play(9));
-        let (device_id, taken) = take_pending_matching_effect(&mut pending, 9).unwrap();
-        assert_eq!(device_id, "dev-b");
-        assert_eq!(taken.effect_id, 9);
-        assert_eq!(pending.len(), 1);
-        assert!(pending.contains_key("dev-a"));
-    }
-
-    #[test]
-    fn take_pending_matching_effect_no_match_returns_none() {
-        let mut pending = HashMap::new();
-        pending.insert("dev-a".to_string(), pending_play(5));
-        assert!(take_pending_matching_effect(&mut pending, 9).is_none());
-        assert_eq!(pending.len(), 1);
-    }
-
-    #[test]
     fn take_all_pending_matching_effect_returns_every_device_with_that_id() {
         let mut pending = HashMap::new();
         pending.insert("dev-a".to_string(), pending_play(5));
@@ -464,5 +471,105 @@ mod tests {
         let taken = take_all_pending_matching_effect(&mut pending, 9);
         assert!(taken.is_empty());
         assert_eq!(pending.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn play_miss_creates_pending_entry_and_does_not_schedule() {
+        let fake = Arc::new(FakePlayback::default());
+        let mut app = test_app(fake.clone());
+        app.handle_ff_event("dev-a".to_string(), FfEvent::Play { effect_id: 5 })
+            .await;
+        assert_eq!(app.pending_plays.len(), 1);
+        assert!(fake.scheduled.lock().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn upload_resolves_pending_play_and_schedules() {
+        let fake = Arc::new(FakePlayback::default());
+        let mut app = test_app(fake.clone());
+        app.handle_ff_event("dev-a".to_string(), FfEvent::Play { effect_id: 5 })
+            .await;
+        app.handle_effect_uploaded(EffectUploaded {
+            tgid: 1,
+            effect_id: 5,
+            effect: rumble_effect(),
+        })
+        .await;
+        assert!(app.pending_plays.is_empty());
+        let scheduled = fake.scheduled.lock().await;
+        assert_eq!(scheduled.len(), 1);
+        assert_eq!(scheduled[0].0, "dev-a");
+    }
+
+    #[tokio::test]
+    async fn upload_resolves_every_device_pending_on_the_same_effect_id() {
+        // Regression test for the fix to handle_effect_uploaded: it must
+        // resolve every device waiting on this effect_id, not just one.
+        let fake = Arc::new(FakePlayback::default());
+        let mut app = test_app(fake.clone());
+        app.handle_ff_event("dev-a".to_string(), FfEvent::Play { effect_id: 5 })
+            .await;
+        app.handle_ff_event("dev-b".to_string(), FfEvent::Play { effect_id: 5 })
+            .await;
+        app.handle_effect_uploaded(EffectUploaded {
+            tgid: 1,
+            effect_id: 5,
+            effect: rumble_effect(),
+        })
+        .await;
+        assert!(app.pending_plays.is_empty());
+        let scheduled = fake.scheduled.lock().await;
+        assert_eq!(scheduled.len(), 2);
+        let devices: std::collections::HashSet<_> =
+            scheduled.iter().map(|(d, _)| d.clone()).collect();
+        assert!(devices.contains("dev-a"));
+        assert!(devices.contains("dev-b"));
+    }
+
+    #[tokio::test]
+    async fn stop_clears_pending_play_for_that_device() {
+        let fake = Arc::new(FakePlayback::default());
+        let mut app = test_app(fake.clone());
+        app.handle_ff_event("dev-a".to_string(), FfEvent::Play { effect_id: 5 })
+            .await;
+        app.handle_ff_event("dev-a".to_string(), FfEvent::Stop { effect_id: 5 })
+            .await;
+        assert!(app.pending_plays.is_empty());
+        // an upload arriving after the stop must not schedule anything —
+        // the pending play was cleared, not merely forgotten-but-still-live
+        app.handle_effect_uploaded(EffectUploaded {
+            tgid: 1,
+            effect_id: 5,
+            effect: rumble_effect(),
+        })
+        .await;
+        assert!(fake.scheduled.lock().await.is_empty());
+        assert_eq!(fake.stopped.lock().await.as_slice(), ["dev-a"]);
+    }
+
+    #[tokio::test]
+    async fn erase_clears_pending_play_for_that_effect_id() {
+        let fake = Arc::new(FakePlayback::default());
+        let mut app = test_app(fake.clone());
+        app.handle_ff_event("dev-a".to_string(), FfEvent::Play { effect_id: 5 })
+            .await;
+        app.handle_effect_erased(1, 5).await;
+        assert!(app.pending_plays.is_empty());
+    }
+
+    #[tokio::test]
+    async fn play_with_immediate_match_processes_without_pending() {
+        let fake = Arc::new(FakePlayback::default());
+        let mut app = test_app(fake.clone());
+        app.handle_effect_uploaded(EffectUploaded {
+            tgid: 1,
+            effect_id: 5,
+            effect: rumble_effect(),
+        })
+        .await;
+        app.handle_ff_event("dev-a".to_string(), FfEvent::Play { effect_id: 5 })
+            .await;
+        assert!(app.pending_plays.is_empty());
+        assert_eq!(fake.scheduled.lock().await.len(), 1);
     }
 }
