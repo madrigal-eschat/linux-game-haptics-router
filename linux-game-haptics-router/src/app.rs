@@ -102,7 +102,11 @@ impl App {
     }
 
     pub async fn handle_effect_erased(&mut self, tgid: u32, effect_id: i16) {
-        log::info!("effect_store: erasing tgid={} effect_id={}", tgid, effect_id);
+        log::info!(
+            "effect_store: erasing tgid={} effect_id={}",
+            tgid,
+            effect_id
+        );
         purge_effect_id(&mut self.effect_store, effect_id);
 
         for (device_id, pending) in
@@ -122,7 +126,8 @@ impl App {
             FfEvent::Stop { effect_id } => {
                 log::info!("FF event: Stop effect_id={} on {}", effect_id, device_id);
                 purge_effect_id(&mut self.effect_store, effect_id);
-                if let Some(pending) = take_pending_for_device(&mut self.pending_plays, &device_id) {
+                if let Some(pending) = take_pending_for_device(&mut self.pending_plays, &device_id)
+                {
                     log::info!(
                         "pending play effect_id={} on {} cleared by stop after {:?}",
                         pending.effect_id,
@@ -152,7 +157,12 @@ impl App {
                             self.effect_store.len(),
                             device_id
                         );
-                        insert_pending(&mut self.pending_plays, device_id, effect_id, Instant::now());
+                        insert_pending(
+                            &mut self.pending_plays,
+                            device_id,
+                            effect_id,
+                            Instant::now(),
+                        );
                     }
                 }
             }
@@ -256,7 +266,13 @@ fn insert_pending(
     effect_id: i16,
     issued_at: Instant,
 ) {
-    pending.insert(device_id, PendingPlay { effect_id, issued_at });
+    pending.insert(
+        device_id,
+        PendingPlay {
+            effect_id,
+            issued_at,
+        },
+    );
 }
 
 /// Remove and return the pending play for a specific device, if any.
@@ -375,8 +391,18 @@ mod tests {
     #[test]
     fn insert_pending_overwrites_existing_for_same_device() {
         let mut pending = HashMap::new();
-        insert_pending(&mut pending, "dev-a".to_string(), 5, std::time::Instant::now());
-        insert_pending(&mut pending, "dev-a".to_string(), 9, std::time::Instant::now());
+        insert_pending(
+            &mut pending,
+            "dev-a".to_string(),
+            5,
+            std::time::Instant::now(),
+        );
+        insert_pending(
+            &mut pending,
+            "dev-a".to_string(),
+            9,
+            std::time::Instant::now(),
+        );
         assert_eq!(pending.len(), 1);
         assert_eq!(pending["dev-a"].effect_id, 9);
     }
