@@ -7,7 +7,7 @@ use aya_ebpf::macros::map;
 use aya_ebpf::macros::tracepoint;
 use aya_ebpf::programs::TracePointContext;
 use linux_game_haptics_router_common::{
-    eviocrmff_nr, eviocsff_nr, EnterScratch, FfEffect, ProbeEvent, PROBE_EVENT_KIND_ERASED,
+    EnterScratch, FfEffect, ProbeEvent, EVIOCRMFF_NR, EVIOCSFF_NR, PROBE_EVENT_KIND_ERASED,
     PROBE_EVENT_KIND_UPLOADED,
 };
 
@@ -44,10 +44,10 @@ fn try_enter(ctx: &TracePointContext) -> Result<(), i64> {
     let cmd: u64 = unsafe { ctx.read_at(24).map_err(|_| 0i64)? };
     let cmd = cmd as u32;
 
-    if cmd == eviocrmff_nr() {
+    if cmd == EVIOCRMFF_NR {
         return try_enter_erase(ctx);
     }
-    if cmd != eviocsff_nr() {
+    if cmd != EVIOCSFF_NR {
         return Ok(());
     }
     unsafe {

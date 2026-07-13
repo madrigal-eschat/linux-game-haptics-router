@@ -15,7 +15,7 @@ Single Cargo workspace, three crates:
 
 - `linux-game-haptics-router-common` — `#![no_std]`-compatible shared types
   (`FfEffect`, `ProbeEvent`, `Waveform`, `Envelope`, FF_* constants,
-  `eviocsff_nr()`). Built twice: natively for userspace (`user` feature, pulls
+  `EVIOCSFF_NR`). Built twice: natively for userspace (`user` feature, pulls
   in `bson`/enables size-48 assertions for the host arch) and cross-compiled
   `no_std` into the eBPF program.
 - `linux-game-haptics-router-ebpf` — the actual eBPF program (`aya-ebpf`),
@@ -85,7 +85,7 @@ host. `linux-game-haptics-router-e2e` is excluded from the default
 ## Data flow / architecture notes
 
 1. **eBPF side** (`linux-game-haptics-router-ebpf/src/main.rs`): on
-   `sys_enter_ioctl`, compares the ioctl `cmd` against `eviocsff_nr()`
+   `sys_enter_ioctl`, compares the ioctl `cmd` against `EVIOCSFF_NR`
    (computed at compile time from the kernel's real `struct ff_effect` size —
    **48 bytes**, not `size_of::<FfEffect>()`, see `KERNEL_FF_EFFECT_SIZE` in
    `linux-game-haptics-router-common/src/lib.rs`). Reads the raw kernel struct
