@@ -118,7 +118,7 @@ const KERNEL_FF_EFFECT_SIZE: u32 = 48;
 // Linux ioctl number encoding (see uapi `asm-generic/ioctl.h`): a 32-bit
 // value packed as `dir:2 | size:14 | type:8 | nr:8`, built by the kernel's
 // `_IOC`/`_IOW` macros. The four pieces below name every field that goes
-// into that packing so `eviocsff_nr`/`eviocrmff_nr` don't spell out raw
+// into that packing so `EVIOCSFF_NR`/`EVIOCRMFF_NR` don't spell out raw
 // hex/shift magic.
 
 /// `_IOC_WRITE` direction bit (bit 30): userspace writes data to the
@@ -146,28 +146,24 @@ const EVIOCRMFF_NR_BYTE: u32 = 0x81;
 /// int)`), so its encoded size is `sizeof(c_int)`, not a struct size.
 const EVIOCRMFF_ARG_SIZE: u32 = 4;
 
-/// Compute EVIOCSFF ioctl number at compile time.
+/// EVIOCSFF ioctl number.
 /// #define EVIOCSFF _IOC(_IOC_WRITE, 'E', 0x80, sizeof(struct ff_effect))
 /// = (1<<30) | (size<<16) | ('E'<<8) | 0x80
 /// (verified against a live strace: real value is 0x40304580 for size=48 —
 /// confirms 'E'=0x45 and size=48 were already right; only the nr byte
 /// (0x80, not 0x52) was wrong)
-pub const fn eviocsff_nr() -> u32 {
-    IOC_DIR_WRITE
-        | ((KERNEL_FF_EFFECT_SIZE & IOC_SIZE_MASK) << 16)
-        | (IOC_TYPE_EVDEV << 8)
-        | EVIOCSFF_NR_BYTE
-}
+pub const EVIOCSFF_NR: u32 = IOC_DIR_WRITE
+    | ((KERNEL_FF_EFFECT_SIZE & IOC_SIZE_MASK) << 16)
+    | (IOC_TYPE_EVDEV << 8)
+    | EVIOCSFF_NR_BYTE;
 
-/// Compute EVIOCRMFF ioctl number at compile time.
+/// EVIOCRMFF ioctl number.
 /// #define EVIOCRMFF _IOW('E', 0x81, int)
 /// = (1<<30) | (size_of::<i32>()<<16) | ('E'<<8) | 0x81
-pub const fn eviocrmff_nr() -> u32 {
-    IOC_DIR_WRITE
-        | ((EVIOCRMFF_ARG_SIZE & IOC_SIZE_MASK) << 16)
-        | (IOC_TYPE_EVDEV << 8)
-        | EVIOCRMFF_NR_BYTE
-}
+pub const EVIOCRMFF_NR: u32 = IOC_DIR_WRITE
+    | ((EVIOCRMFF_ARG_SIZE & IOC_SIZE_MASK) << 16)
+    | (IOC_TYPE_EVDEV << 8)
+    | EVIOCRMFF_NR_BYTE;
 
 /// `ProbeEvent.kind` discriminant: this event is a freshly-uploaded effect
 /// (the existing, original event shape — `effect` is meaningful).
@@ -227,7 +223,7 @@ mod tests {
     // doc comment) — this pins that against regressions in the bit-packing.
     #[test]
     fn eviocsff_nr_matches_strace_verified_value() {
-        assert_eq!(eviocsff_nr(), 0x4030_4580);
+        assert_eq!(EVIOCSFF_NR, 0x4030_4580);
     }
 
     #[test]
@@ -257,7 +253,7 @@ mod tests {
     // strace of an EVIOCRMFF call if this ever needs re-verifying.
     #[test]
     fn eviocrmff_nr_matches_the_ioc_write_e_0x81_int_macro_definition() {
-        assert_eq!(eviocrmff_nr(), 0x4004_4581);
+        assert_eq!(EVIOCRMFF_NR, 0x4004_4581);
     }
 
     #[test]
