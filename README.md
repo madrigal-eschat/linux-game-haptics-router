@@ -64,7 +64,7 @@ echo '{"scale": 0.5}' | sudo tee /proc/$(pgrep game-haptics-router)/fd/0
 
 - Only detects **evdev** force-feedback devices — anything a game drives
   through a different haptics path (e.g. DualSense adaptive triggers/haptics
-  over its non-evdev HID report, or some kind of libusb-based 
+  over its non-evdev HID report, or some kind of libusb-based
   direct-to-controller communication) is invisible to this tool.
   Adding support for additional feedback detection isn't _out_ of scope, but
   it's also not currently a priority.
