@@ -64,7 +64,7 @@ echo '{"scale": 0.5}' | sudo tee /proc/$(pgrep game-haptics-router)/fd/0
 
 - Only detects **evdev** force-feedback devices — anything a game drives
   through a different haptics path (e.g. DualSense adaptive triggers/haptics
-  over its non-evdev HID report, or some kind of libusb-based 
+  over its non-evdev HID report, or some kind of libusb-based
   direct-to-controller communication) is invisible to this tool.
   Adding support for additional feedback detection isn't _out_ of scope, but
   it's also not currently a priority.
@@ -118,3 +118,10 @@ CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc \
 
 Running the built binary (whether via `cargo run` or the installed binary)
 needs root, same as [Usage](#usage) above.
+
+## End-to-end tests
+
+`e2e/run.sh` boots a QEMU VM and runs the full pipeline (real eBPF probe,
+real daemon, a virtual FF gamepad, and an in-process fake buttplug server)
+against a handful of gesture scenarios. See [CLAUDE.md](CLAUDE.md#end-to-end-test)
+for details.

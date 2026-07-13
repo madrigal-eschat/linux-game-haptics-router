@@ -13,11 +13,29 @@ use tokio::task::JoinHandle;
 /// or explicit null) means broadcast to every connected device.
 pub type DeviceMap = HashMap<String, Option<Vec<u32>>>;
 
+const STEP_MS: u32 = 25;
+
+fn resolve_targets(device_map: &DeviceMap, device_id: &str) -> Option<Vec<u32>> {
+    device_map.get(device_id).cloned().unwrap_or(None)
+}
+
+/// The seam `App` depends on for scheduling/stopping haptic playback,
+/// instead of depending on the concrete `Playback` type directly. This lets
+/// tests fake playback (see `FakePlayback` in `app.rs`'s test module)
+/// instead of needing a live buttplug connection. `Playback` is the real
+/// implementation.
+#[async_trait::async_trait]
+pub trait PlaybackOps: Send + Sync {
+    async fn schedule_sequence(&self, device_id: String, points: Vec<HapticPoint>);
+    async fn stop(&self, device_id: &str);
+    async fn stop_all(&self);
+}
+
 /// Owns the buttplug connection and all in-flight playback for every
 /// haptic-source device. Rust is now solely responsible for scheduling and
 /// sending scalar commands — Python only supplies the scale, websocket
 /// address, and device map at startup (and live scale updates over stdin).
-pub struct Playback {
+struct PlaybackInner {
     client: ButtplugClient,
     device_map: DeviceMap,
     scale_bits: AtomicU32,
@@ -29,11 +47,8 @@ pub struct Playback {
     gen_counter: AtomicU64,
 }
 
-const STEP_MS: u32 = 25;
-
-fn resolve_targets(device_map: &DeviceMap, device_id: &str) -> Option<Vec<u32>> {
-    device_map.get(device_id).cloned().unwrap_or(None)
-}
+/// Cheap-to-clone handle around `PlaybackInner`.
+pub struct Playback(Arc<PlaybackInner>);
 
 impl Playback {
     pub async fn connect_with_retry(
@@ -64,19 +79,70 @@ impl Playback {
             }
         };
         log::info!("connected to buttplug server at {}", ws_url);
-        Ok(Arc::new(Self {
+        Ok(Arc::new(Self(Arc::new(PlaybackInner {
             client,
             device_map,
             scale_bits: AtomicU32::new(scale.to_bits()),
             tasks: Mutex::new(HashMap::new()),
             gen_counter: AtomicU64::new(0),
-        }))
+        }))))
     }
 
     pub fn set_scale(&self, scale: f32) {
-        self.scale_bits.store(scale.to_bits(), Ordering::Relaxed);
+        self.0.scale_bits.store(scale.to_bits(), Ordering::Relaxed);
     }
 
+    /// Cancel any sequence already running for this device_id and start a
+    /// new one from the translated effect points.
+    pub async fn schedule_sequence(&self, device_id: String, points: Vec<HapticPoint>) {
+        let gen = self.0.gen_counter.fetch_add(1, Ordering::Relaxed) + 1;
+        let inner = Arc::clone(&self.0);
+        let task_device_id = device_id.clone();
+        let handle = tokio::spawn(async move {
+            PlaybackInner::play_sequence(inner, task_device_id, points, gen).await;
+        });
+        let mut tasks = self.0.tasks.lock().await;
+        if let Some((_, old_handle)) = tasks.insert(device_id, (gen, handle)) {
+            old_handle.abort();
+        }
+    }
+
+    pub async fn stop(&self, device_id: &str) {
+        let mut tasks = self.0.tasks.lock().await;
+        if let Some((_, handle)) = tasks.remove(device_id) {
+            handle.abort();
+        }
+        drop(tasks);
+        let targets = resolve_targets(&self.0.device_map, device_id);
+        PlaybackInner::send_scalar(&self.0.client, &targets, 0.0).await;
+    }
+
+    pub async fn stop_all(&self) {
+        let mut tasks = self.0.tasks.lock().await;
+        for (_, (_, handle)) in tasks.drain() {
+            handle.abort();
+        }
+        drop(tasks);
+        if let Err(e) = self.0.client.stop_all_devices().await {
+            log::warn!("stop_all_devices failed: {}", e);
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl PlaybackOps for Playback {
+    async fn schedule_sequence(&self, device_id: String, points: Vec<HapticPoint>) {
+        Playback::schedule_sequence(self, device_id, points).await
+    }
+    async fn stop(&self, device_id: &str) {
+        Playback::stop(self, device_id).await
+    }
+    async fn stop_all(&self) {
+        Playback::stop_all(self).await
+    }
+}
+
+impl PlaybackInner {
     fn scale(&self) -> f32 {
         f32::from_bits(self.scale_bits.load(Ordering::Relaxed))
     }
@@ -155,21 +221,6 @@ impl Playback {
         while sends.join_next().await.is_some() {}
     }
 
-    /// Cancel any sequence already running for this device_id and start a
-    /// new one from the translated effect points.
-    pub async fn schedule_sequence(self: &Arc<Self>, device_id: String, points: Vec<HapticPoint>) {
-        let gen = self.gen_counter.fetch_add(1, Ordering::Relaxed) + 1;
-        let this = self.clone();
-        let task_device_id = device_id.clone();
-        let handle = tokio::spawn(async move {
-            this.play_sequence(task_device_id, points, gen).await;
-        });
-        let mut tasks = self.tasks.lock().await;
-        if let Some((_, old_handle)) = tasks.insert(device_id, (gen, handle)) {
-            old_handle.abort();
-        }
-    }
-
     async fn play_sequence(self: Arc<Self>, device_id: String, points: Vec<HapticPoint>, gen: u64) {
         let schedule = Self::interpolate_points(&points);
         log::info!(
@@ -187,27 +238,6 @@ impl Playback {
             tasks.remove(&device_id);
         }
     }
-
-    pub async fn stop(&self, device_id: &str) {
-        let mut tasks = self.tasks.lock().await;
-        if let Some((_, handle)) = tasks.remove(device_id) {
-            handle.abort();
-        }
-        drop(tasks);
-        let targets = resolve_targets(&self.device_map, device_id);
-        Self::send_scalar(&self.client, &targets, 0.0).await;
-    }
-
-    pub async fn stop_all(&self) {
-        let mut tasks = self.tasks.lock().await;
-        for (_, (_, handle)) in tasks.drain() {
-            handle.abort();
-        }
-        drop(tasks);
-        if let Err(e) = self.client.stop_all_devices().await {
-            log::warn!("stop_all_devices failed: {}", e);
-        }
-    }
 }
 
 #[cfg(test)]
@@ -222,14 +252,14 @@ mod tests {
 
     #[test]
     fn single_point_produces_one_keyframe() {
-        let schedule = Playback::interpolate_points(&[pt(0, 0.5)]);
+        let schedule = PlaybackInner::interpolate_points(&[pt(0, 0.5)]);
         assert_eq!(schedule, vec![(0, 0.5)]);
     }
 
     #[test]
     fn two_points_evenly_divisible_span_fills_every_step() {
         // 0..100ms in steps of 25 -> boundaries at 0,25,50,75,100
-        let schedule = Playback::interpolate_points(&[pt(0, 1.0), pt(100, 0.0)]);
+        let schedule = PlaybackInner::interpolate_points(&[pt(0, 1.0), pt(100, 0.0)]);
         let times: Vec<u32> = schedule.iter().map(|(t, _)| *t).collect();
         assert_eq!(times, vec![0, 25, 50, 75, 100]);
         // linear ramp down from 1.0 to 0.0
@@ -246,7 +276,7 @@ mod tests {
     fn span_not_a_multiple_of_step_still_hits_exact_end_boundary() {
         // 0..40ms: interpolated steps at 25, then the real boundary at 40
         // (not 50) must still appear exactly, not be skipped or overshot.
-        let schedule = Playback::interpolate_points(&[pt(0, 0.0), pt(40, 1.0)]);
+        let schedule = PlaybackInner::interpolate_points(&[pt(0, 0.0), pt(40, 1.0)]);
         let times: Vec<u32> = schedule.iter().map(|(t, _)| *t).collect();
         assert_eq!(times, vec![0, 25, 40]);
         let last = schedule.last().unwrap();
@@ -258,14 +288,14 @@ mod tests {
     fn zero_length_span_between_points_emits_no_interpolated_samples() {
         // two boundaries at the same dt_ms (instantaneous jump) must not
         // divide-by-zero or loop forever.
-        let schedule = Playback::interpolate_points(&[pt(0, 0.0), pt(0, 1.0), pt(50, 0.0)]);
+        let schedule = PlaybackInner::interpolate_points(&[pt(0, 0.0), pt(0, 1.0), pt(50, 0.0)]);
         let times: Vec<u32> = schedule.iter().map(|(t, _)| *t).collect();
         assert_eq!(times, vec![0, 0, 25, 50]);
     }
 
     #[test]
     fn multi_segment_ramp_up_then_down() {
-        let schedule = Playback::interpolate_points(&[pt(0, 0.0), pt(50, 1.0), pt(100, 0.0)]);
+        let schedule = PlaybackInner::interpolate_points(&[pt(0, 0.0), pt(50, 1.0), pt(100, 0.0)]);
         let times: Vec<u32> = schedule.iter().map(|(t, _)| *t).collect();
         assert_eq!(times, vec![0, 25, 50, 75, 100]);
         let by_t: HashMap<u32, f32> = schedule.into_iter().collect();
@@ -278,7 +308,7 @@ mod tests {
 
     #[test]
     fn empty_points_produce_empty_schedule() {
-        let schedule = Playback::interpolate_points(&[]);
+        let schedule = PlaybackInner::interpolate_points(&[]);
         assert!(schedule.is_empty());
     }
 
@@ -287,8 +317,8 @@ mod tests {
     #[test]
     fn format_schedule_log_includes_boundaries_and_keyframes() {
         let points = vec![pt(0, 0.5), pt(100, 0.0)];
-        let schedule = Playback::interpolate_points(&points);
-        let log = Playback::format_schedule_log("dev-a", &points, &schedule);
+        let schedule = PlaybackInner::interpolate_points(&points);
+        let log = PlaybackInner::format_schedule_log("dev-a", &points, &schedule);
         assert!(log.contains("dev-a"));
         assert!(log.contains("2 boundary point(s)"));
         assert!(log.contains(&format!("{} keyframe(s)", schedule.len())));
@@ -298,7 +328,7 @@ mod tests {
 
     #[test]
     fn format_schedule_log_empty_schedule_reports_zero_duration() {
-        let log = Playback::format_schedule_log("dev-a", &[], &[]);
+        let log = PlaybackInner::format_schedule_log("dev-a", &[], &[]);
         assert!(log.contains("over 0ms"));
     }
 

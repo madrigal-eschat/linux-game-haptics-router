@@ -6,7 +6,10 @@ use aya_ebpf::helpers::bpf_probe_read_user_buf;
 use aya_ebpf::macros::map;
 use aya_ebpf::macros::tracepoint;
 use aya_ebpf::programs::TracePointContext;
-use linux_game_haptics_router_common::{eviocsff_nr, EnterScratch, FfEffect, ProbeEvent};
+use linux_game_haptics_router_common::{
+    EnterScratch, FfEffect, ProbeEvent, EVIOCRMFF_NR, EVIOCSFF_NR, PROBE_EVENT_KIND_ERASED,
+    PROBE_EVENT_KIND_UPLOADED,
+};
 
 /// Per-thread scratch: tgid<<32|pid → EnterScratch.
 /// LRU because a killed/aborted thread never reaches sys_exit_ioctl to
@@ -39,7 +42,12 @@ pub fn sys_enter_ioctl(ctx: TracePointContext) -> i32 {
 
 fn try_enter(ctx: &TracePointContext) -> Result<(), i64> {
     let cmd: u64 = unsafe { ctx.read_at(24).map_err(|_| 0i64)? };
-    if cmd as u32 != eviocsff_nr() {
+    let cmd = cmd as u32;
+
+    if cmd == EVIOCRMFF_NR {
+        return try_enter_erase(ctx);
+    }
+    if cmd != EVIOCSFF_NR {
         return Ok(());
     }
     unsafe {
@@ -115,6 +123,40 @@ fn try_enter(ctx: &TracePointContext) -> Result<(), i64> {
     Ok(())
 }
 
+/// EVIOCRMFF ("erase a force-feedback effect") is simpler to capture than
+/// EVIOCSFF: the kernel's ioctl handler (`evdev_do_ioctl`) casts its `arg`
+/// register directly to an `int` effect id for this command — there is no
+/// userspace struct to read, so unlike the upload path, no enter/exit split
+/// is needed; the whole thing is captured and submitted here at enter.
+fn try_enter_erase(ctx: &TracePointContext) -> Result<(), i64> {
+    let arg: u64 = unsafe { ctx.read_at(32).map_err(|_| 0i64)? };
+    let effect_id = arg as i32 as i16;
+
+    let tgid_pid = unsafe { aya_ebpf::helpers::bpf_get_current_pid_tgid() };
+    let tgid = (tgid_pid >> 32) as u32;
+
+    unsafe {
+        bpf_printk!(
+            c"game-haptics-router: EVIOCRMFF erase tgid=%d effect_id=%d",
+            tgid as i64,
+            effect_id as i64
+        )
+    };
+
+    let event = ProbeEvent {
+        kind: PROBE_EVENT_KIND_ERASED,
+        tgid,
+        effect_id,
+        _pad: 0,
+        effect: FfEffect::default(),
+    };
+    if let Some(mut entry) = unsafe { EVENTS.reserve::<ProbeEvent>(0) } {
+        entry.write(event);
+        entry.submit(0);
+    }
+    Ok(())
+}
+
 /// Tracepoint: sys_exit_ioctl
 #[tracepoint]
 pub fn sys_exit_ioctl(ctx: TracePointContext) -> i32 {
@@ -165,6 +207,7 @@ fn try_exit(ctx: &TracePointContext) -> Result<(), i64> {
     };
 
     let event = ProbeEvent {
+        kind: PROBE_EVENT_KIND_UPLOADED,
         tgid,
         effect_id,
         _pad: 0,

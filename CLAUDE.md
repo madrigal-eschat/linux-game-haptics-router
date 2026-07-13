@@ -15,7 +15,7 @@ Single Cargo workspace, three crates:
 
 - `linux-game-haptics-router-common` — `#![no_std]`-compatible shared types
   (`FfEffect`, `ProbeEvent`, `Waveform`, `Envelope`, FF_* constants,
-  `eviocsff_nr()`). Built twice: natively for userspace (`user` feature, pulls
+  `EVIOCSFF_NR`). Built twice: natively for userspace (`user` feature, pulls
   in `bson`/enables size-48 assertions for the host arch) and cross-compiled
   `no_std` into the eBPF program.
 - `linux-game-haptics-router-ebpf` — the actual eBPF program (`aya-ebpf`),
@@ -63,10 +63,29 @@ sudo ./target/debug/game-haptics-router --ws-url ws://127.0.0.1:12345 --scale 0.
   --device-map '{"usb-0000:00:14.0-1/input0": [0,1]}'
 ```
 
+## End-to-end test
+
+`e2e/run.sh` boots a QEMU VM matching the host arch, deploys the built
+`game-haptics-router` daemon plus a test harness binary (`e2e-tests`, in the
+`linux-game-haptics-router-e2e` crate) into it, and runs a smoke-set of FF
+gestures against a virtual gamepad (via `evdev`'s uinput support) and an
+in-process fake buttplug server, asserting two 250ms timing bounds: command
+dispatch latency, and final zero-magnitude ("stop") command latency
+relative to the gesture's expected end time.
+
+```bash
+./e2e/run.sh
+```
+
+Requires QEMU with KVM and `cloud-image-utils` (for `cloud-localds`) on the
+host. `linux-game-haptics-router-e2e` is excluded from the default
+`cargo build/test --workspace` the same way the ebpf crate is — it needs
+`/dev/uinput` and root, which a plain dev shell doesn't have.
+
 ## Data flow / architecture notes
 
 1. **eBPF side** (`linux-game-haptics-router-ebpf/src/main.rs`): on
-   `sys_enter_ioctl`, compares the ioctl `cmd` against `eviocsff_nr()`
+   `sys_enter_ioctl`, compares the ioctl `cmd` against `EVIOCSFF_NR`
    (computed at compile time from the kernel's real `struct ff_effect` size —
    **48 bytes**, not `size_of::<FfEffect>()`, see `KERNEL_FF_EFFECT_SIZE` in
    `linux-game-haptics-router-common/src/lib.rs`). Reads the raw kernel struct
@@ -75,13 +94,16 @@ sudo ./target/debug/game-haptics-router --ws-url ws://127.0.0.1:12345 --scale 0.
    by `tgid<<32|pid`. On `sys_exit_ioctl`, reads back the effect id the kernel
    just assigned (the whole reason capture is split across enter/exit), stores
    the completed `FfEffect` in `EFFECT_STORE`, and submits a `ProbeEvent` to
-   the `EVENTS` ring buffer. Both maps are `LruHashMap`s specifically because
-   nothing ever tells the probe when a process exits or an effect is freed via
-   `EVIOCRMFF` — plain hashmaps would leak forever.
+   the `EVENTS` ring buffer. `sys_enter_ioctl` also matches `EVIOCRMFF`
+   (effect erase) directly — its `arg` is the effect id itself, not a
+   pointer, so it's captured and submitted with no `sys_exit_ioctl`
+   involvement, unlike the upload path. Both maps are `LruHashMap`s because
+   nothing tells the probe when a process exits without erasing its
+   effects first — plain hashmaps would still leak in that case.
 2. **Loading** (`linux-game-haptics-router/src/ebpf.rs`): attaches both
    tracepoints, then polls the ring buffer via `AsyncFd` (event-driven on the
-   map fd's EPOLLIN, not a busy/sleep loop) and forwards `EffectUploaded`
-   events to `App`.
+   map fd's EPOLLIN, not a busy/sleep loop) and forwards a `ProbeEventMsg`
+   (`Uploaded`/`Erased`, decoded from `ProbeEvent.kind`) to `App`.
 3. **App** (`app.rs`) keeps its own userspace `effect_store: HashMap<(tgid,
    effect_id), FfEffect>` (separate from the eBPF map) plus a per-device evdev
    reader spawned per FF-capable device found by `device::list_ff_devices()`.
@@ -89,7 +111,12 @@ sudo ./target/debug/game-haptics-router --ws-url ws://127.0.0.1:12345 --scale 0.
    reappear at a new `/dev/input` path after reconnecting. Effect ids are only
    unique per-tgid at any instant — the kernel reuses them — so
    `upsert_effect`/`purge_effect_id` evict any other tgid's entry for the same
-   numeric id before/when acting on it.
+   numeric id before/when acting on it. A Play arriving before its effect's
+   upload has been processed (a real race between the eBPF ring-buffer path
+   and the evdev-reader path) is held in `pending_plays: HashMap<device_id,
+   PendingPlay>` (at most one per device) and resolved event-driven — no
+   timeout — by whichever comes first: the matching upload, a Stop for that
+   device, or an erase of that effect id.
 4. **Play/Stop events** read off evdev (`device::next_ff_event`) look up the
    matching effect, run it through `translate::translate()` to get a list of
    `HapticPoint { dt_ms, intensity }`, and hand it to `Playback`.

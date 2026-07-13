@@ -39,7 +39,7 @@ jobs:
       - uses: ./.github/actions/rust-bpf-setup
         with:
           target: ${{ matrix.target }}
-      - run: cargo check --workspace --exclude linux-game-haptics-router-ebpf --target ${{ matrix.target }}
+      - run: cargo check --workspace --exclude linux-game-haptics-router-ebpf --exclude linux-game-haptics-router-e2e --target ${{ matrix.target }}
 
   clippy:
     runs-on: ubuntu-latest
@@ -51,7 +51,7 @@ jobs:
       - uses: ./.github/actions/rust-bpf-setup
         with:
           target: ${{ matrix.target }}
-      - run: cargo clippy --workspace --exclude linux-game-haptics-router-ebpf --all-targets --target ${{ matrix.target }} -- -D warnings
+      - run: cargo clippy --workspace --exclude linux-game-haptics-router-ebpf --exclude linux-game-haptics-router-e2e --all-targets --target ${{ matrix.target }} -- -D warnings
 
   # aarch64 binaries can't execute on the x86_64 runner, so tests only run
   # natively; the aarch64 target is still exercised by check/clippy/build.
@@ -60,7 +60,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/rust-bpf-setup
-      - run: cargo test --workspace --exclude linux-game-haptics-router-ebpf
+      - run: cargo test --workspace --exclude linux-game-haptics-router-ebpf --exclude linux-game-haptics-router-e2e
 
   build:
     runs-on: ubuntu-latest
@@ -72,7 +72,7 @@ jobs:
       - uses: ./.github/actions/rust-bpf-setup
         with:
           target: ${{ matrix.target }}
-      - run: cargo build --workspace --exclude linux-game-haptics-router-ebpf --release --target ${{ matrix.target }}
+      - run: cargo build --workspace --exclude linux-game-haptics-router-ebpf --exclude linux-game-haptics-router-e2e --release --target ${{ matrix.target }}
 
   coverage:
     runs-on: ubuntu-latest
@@ -89,9 +89,32 @@ jobs:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/rust-bpf-setup
       - uses: taiki-e/install-action@cargo-llvm-cov
-      - run: cargo llvm-cov --workspace --exclude linux-game-haptics-router-ebpf --lcov --output-path lcov.info
-      - uses: codecov/codecov-action@v7
+      - run: cargo llvm-cov --workspace --exclude linux-game-haptics-router-ebpf --exclude linux-game-haptics-router-e2e --lcov --output-path lcov.info
+      - uses: codecov/codecov-action@v4
         with:
           files: lcov.info
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
+
+  e2e:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+          # ubuntu-24.04-arm dropped: GitHub-hosted aarch64 runners have no
+          # /dev/kvm, so the VM only boots under TCG software emulation —
+          # too slow and too jittery for this suite's 250ms timing
+          # assertions to mean anything. Re-add once GitHub offers a
+          # KVM-capable arm runner.
+          # - runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rust-bpf-setup
+      - run: sudo apt-get update && sudo apt-get install -y qemu-system cloud-image-utils
+      # The runner user isn't in the kvm group by default, so /dev/kvm exists
+      # but isn't accessible even when present (e.g. ubuntu-latest).
+      - run: '[ -e /dev/kvm ] && sudo chmod 666 /dev/kvm || true'
+      - run: ./e2e/run.sh
