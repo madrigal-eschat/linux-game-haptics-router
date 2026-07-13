@@ -1314,7 +1314,7 @@ checksum = "68ab91017fe16c622486840e4c83c9a37afeff978bd239b5293d61ece587de66"
 
 [[package]]
 name = "linux-game-haptics-router"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1334,14 +1334,14 @@ dependencies = [
 
 [[package]]
 name = "linux-game-haptics-router-common"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
  "bson",
 ]
 
 [[package]]
 name = "linux-game-haptics-router-e2e"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "buttplug_core",
@@ -1356,7 +1356,7 @@ dependencies = [
 
 [[package]]
 name = "linux-game-haptics-router-ebpf"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
  "aya-ebpf",
  "aya-log-ebpf",
