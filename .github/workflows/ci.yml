@@ -111,7 +111,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/rust-bpf-setup
       - run: sudo apt-get update && sudo apt-get install -y qemu-system cloud-image-utils
       # The runner user isn't in the kvm group by default, so /dev/kvm exists
