@@ -12,10 +12,10 @@ name = "e2e-tests"
 path = "src/bin/e2e-tests.rs"
 
 [dependencies]
-evdev            = "0.12"
+evdev            = "0.13"
 buttplug_core    = "10.0.3"
 tokio            = { version = "1", features = ["full"] }
-tokio-tungstenite = "0.28"
+tokio-tungstenite = "0.30"
 futures-util     = "0.3"
 serde_json       = "1"
 anyhow           = "1"
