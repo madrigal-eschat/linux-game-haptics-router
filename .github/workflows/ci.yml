@@ -90,7 +90,7 @@ jobs:
       - uses: ./.github/actions/rust-bpf-setup
       - uses: taiki-e/install-action@cargo-llvm-cov
       - run: cargo llvm-cov --workspace --exclude linux-game-haptics-router-ebpf --exclude linux-game-haptics-router-e2e --lcov --output-path lcov.info
-      - uses: codecov/codecov-action@v4
+      - uses: codecov/codecov-action@v7
         with:
           files: lcov.info
           fail_ci_if_error: false
