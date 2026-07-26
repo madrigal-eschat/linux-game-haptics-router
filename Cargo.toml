@@ -6,3 +6,11 @@ members = [
     "linux-game-haptics-router-e2e",
 ]
 resolver = "2"
+
+# Shared by linux-game-haptics-router and linux-game-haptics-router-e2e so the
+# two crates can't drift onto semver-incompatible evdev versions the way they
+# did before (main crate on 0.13, e2e still on 0.12) — pinning both to the
+# same workspace dependency makes that class of mismatch a compile-time
+# version-unification error instead of a silent split.
+[workspace.dependencies]
+evdev = "0.13"

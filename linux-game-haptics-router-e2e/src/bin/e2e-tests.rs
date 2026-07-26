@@ -121,7 +121,7 @@ where
 /// node) — the kernel's per-device event buffer is shared across every open
 /// fd, so a SYN_REPORT from any of them flushes what any other one wrote.
 fn syn_report(dev: &mut Device) -> std::io::Result<()> {
-    dev.send_events(&[InputEvent::new(EventType::SYNCHRONIZATION, 0, 0)])
+    dev.send_events(&[InputEvent::new(EventType::SYNCHRONIZATION.0, 0, 0)])
 }
 
 fn device_id_for(path: &std::path::Path) -> Result<String> {

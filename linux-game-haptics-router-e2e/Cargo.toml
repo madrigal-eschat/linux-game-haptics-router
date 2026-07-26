@@ -1,6 +1,6 @@
 [package]
 name = "linux-game-haptics-router-e2e"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 
 [lib]
@@ -12,7 +12,7 @@ name = "e2e-tests"
 path = "src/bin/e2e-tests.rs"
 
 [dependencies]
-evdev            = "0.12"
+evdev            = { workspace = true }
 buttplug_core    = "10.0.3"
 tokio            = { version = "1", features = ["full"] }
 tokio-tungstenite = "0.28"
