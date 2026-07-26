@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
-use evdev::uinput::VirtualDeviceBuilder;
-use evdev::{AttributeSet, FFEffectType, InputEventKind, UInputEventType};
+use evdev::uinput::VirtualDevice;
+use evdev::{AttributeSet, EventSummary, FFEffectCode, UInputCode};
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
@@ -13,14 +13,14 @@ pub struct FakeGamepad {
 /// the kernel routes back to this uinput fd (required before any EVIOCSFF
 /// ioctl issued against the resulting device node can complete).
 pub fn spawn_fake_gamepad(name: &str) -> Result<FakeGamepad> {
-    let mut device = VirtualDeviceBuilder::new()
+    let mut device = VirtualDevice::builder()
         .context("opening /dev/uinput (needs root or a uinput udev rule)")?
         .name(name)
         .with_ff(&AttributeSet::from_iter([
-            FFEffectType::FF_RUMBLE,
-            FFEffectType::FF_PERIODIC,
-            FFEffectType::FF_CONSTANT,
-            FFEffectType::FF_RAMP,
+            FFEffectCode::FF_RUMBLE,
+            FFEffectCode::FF_PERIODIC,
+            FFEffectCode::FF_CONSTANT,
+            FFEffectCode::FF_RAMP,
             // The kernel's FF_PERIODIC validation (input_ff_upload in
             // drivers/input/ff-core.c) checks the specific waveform bit
             // against the same capability bitmap as the effect-type bits
@@ -28,11 +28,11 @@ pub fn spawn_fake_gamepad(name: &str) -> Result<FakeGamepad> {
             // whose bit isn't advertised here fails EVIOCSFF with EINVAL
             // even though FF_PERIODIC is advertised. Advertise every
             // standard (non-custom) waveform so any periodic scenario works.
-            FFEffectType::FF_SQUARE,
-            FFEffectType::FF_TRIANGLE,
-            FFEffectType::FF_SINE,
-            FFEffectType::FF_SAW_UP,
-            FFEffectType::FF_SAW_DOWN,
+            FFEffectCode::FF_SQUARE,
+            FFEffectCode::FF_TRIANGLE,
+            FFEffectCode::FF_SINE,
+            FFEffectCode::FF_SAW_UP,
+            FFEffectCode::FF_SAW_DOWN,
         ]))
         .context("advertising FF effect types")?
         .with_ff_effects_max(16)
@@ -58,24 +58,25 @@ pub fn spawn_fake_gamepad(name: &str) -> Result<FakeGamepad> {
                     }
                 };
                 for event in events {
-                    let InputEventKind::UInput(code) = event.kind() else {
-                        continue;
-                    };
-                    if code == UInputEventType::UI_FF_UPLOAD.0 {
-                        if let Ok(mut upload) = device.process_ff_upload(event) {
-                            match free_ids.iter().next().copied() {
-                                Some(id) => {
-                                    free_ids.remove(&id);
-                                    upload.set_effect_id(id);
-                                    upload.set_retval(0);
+                    match event.destructure() {
+                        EventSummary::UInput(event, UInputCode::UI_FF_UPLOAD, ..) => {
+                            if let Ok(mut upload) = device.process_ff_upload(event) {
+                                match free_ids.iter().next().copied() {
+                                    Some(id) => {
+                                        free_ids.remove(&id);
+                                        upload.set_effect_id(id);
+                                        upload.set_retval(0);
+                                    }
+                                    None => upload.set_retval(-1),
                                 }
-                                None => upload.set_retval(-1),
                             }
                         }
-                    } else if code == UInputEventType::UI_FF_ERASE.0 {
-                        if let Ok(erase) = device.process_ff_erase(event) {
-                            free_ids.insert(erase.effect_id() as i16);
+                        EventSummary::UInput(event, UInputCode::UI_FF_ERASE, ..) => {
+                            if let Ok(erase) = device.process_ff_erase(event) {
+                                free_ids.insert(erase.effect_id() as i16);
+                            }
                         }
+                        _ => {}
                     }
                 }
             }
