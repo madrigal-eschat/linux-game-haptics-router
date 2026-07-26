@@ -1,3 +1,10 @@
+## [0.2.1](https://github.com/madrigal-eschat/linux-game-haptics-router/compare/v0.2.0...v0.2.1) (2026-07-26)
+
+
+### Bug Fixes
+
+* **e2e:** port gamepad harness to evdev 0.13, unify evdev version ([#23](https://github.com/madrigal-eschat/linux-game-haptics-router/issues/23)) ([5357755](https://github.com/madrigal-eschat/linux-game-haptics-router/commit/5357755ff1a0326b9d9a1b1c581824b8e8ca16d9))
+
 ## [0.2.0](https://github.com/madrigal-eschat/linux-game-haptics-router/compare/v0.1.2...v0.2.0) (2026-07-13)
 
 
