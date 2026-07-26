@@ -1,3 +1,10 @@
+## [0.2.2](https://github.com/madrigal-eschat/linux-game-haptics-router/compare/v0.2.1...v0.2.2) (2026-07-26)
+
+
+### Bug Fixes
+
+* **release:** include e2e crate's Cargo.toml in release-commit assets ([#25](https://github.com/madrigal-eschat/linux-game-haptics-router/issues/25)) ([aa27657](https://github.com/madrigal-eschat/linux-game-haptics-router/commit/aa27657d6d29803b1977810135260cf9dc07073a))
+
 ## [0.2.1](https://github.com/madrigal-eschat/linux-game-haptics-router/compare/v0.2.0...v0.2.1) (2026-07-26)
 
 
