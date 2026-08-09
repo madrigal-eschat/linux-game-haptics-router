@@ -19,7 +19,7 @@ serde          = { version = "1", features = ["derive"] }
 log            = "0.4"
 env_logger     = "0.11"
 serde_json     = "1"
-buttplug = "10.0.3"
+buttplug = "11.0.0"
 clap           = { version = "4", features = ["derive"] }
 
 [build-dependencies]
