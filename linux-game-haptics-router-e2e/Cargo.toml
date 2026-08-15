@@ -13,7 +13,7 @@ path = "src/bin/e2e-tests.rs"
 
 [dependencies]
 evdev            = { workspace = true }
-buttplug_core    = "10.0.3"
+buttplug_core    = "11.0.0"
 tokio            = { version = "1", features = ["full"] }
 tokio-tungstenite = "0.30"
 futures-util     = "0.3"
