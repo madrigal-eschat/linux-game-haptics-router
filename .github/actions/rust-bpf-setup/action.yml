@@ -35,9 +35,16 @@ runs:
       with:
         key: ${{ inputs.target }}
 
+    # cargo install builds bpf-linker from source, which needs an llvm-config
+    # on PATH matching the version llvm-sys wants — not reliably present on
+    # GitHub-hosted runners. cargo-binstall fetches bpf-linker's prebuilt
+    # release binary instead, sidestepping the LLVM dependency entirely.
+    - name: Install cargo-binstall
+      uses: taiki-e/install-action@cargo-binstall
+
     - name: Install bpf-linker
       shell: bash
-      run: cargo install bpf-linker --locked
+      run: cargo binstall bpf-linker --no-confirm --locked
 
     - name: Install aarch64 cross linker
       if: inputs.target == 'aarch64-unknown-linux-gnu'
