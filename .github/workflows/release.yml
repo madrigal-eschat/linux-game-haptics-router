@@ -6,6 +6,11 @@ name: Release
 # GitHub Release with generated notes. When a release was cut, the `binaries`
 # job then calls build-release.yml to attach platform binaries to it.
 #
+# The repo has immutable releases enabled, so assets can only be uploaded
+# before a release is published. semantic-release therefore creates the
+# release as a draft (`draftRelease` in .releaserc.json), `binaries` attaches
+# tarballs to the draft, and `publish` flips it to published once they're up.
+#
 # Requires a `RELEASE_TOKEN` repo secret (PAT with `repo` scope, or a GitHub
 # App installation token) so semantic-release's commit/tag push isn't done
 # with the default GITHUB_TOKEN.
@@ -66,3 +71,14 @@ jobs:
       tag: ${{ needs.release.outputs.tag }}
     permissions:
       contents: write
+
+  publish:
+    needs: [release, binaries]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ needs.release.outputs.tag }}
+          draft: false
