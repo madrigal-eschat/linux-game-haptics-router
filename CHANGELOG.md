@@ -1,3 +1,10 @@
+## [0.2.3](https://github.com/madrigal-eschat/linux-game-haptics-router/compare/v0.2.2...v0.2.3) (2026-10-10)
+
+
+### Bug Fixes
+
+* **release:** call build-release explicitly so tarballs get attached ([637836a](https://github.com/madrigal-eschat/linux-game-haptics-router/commit/637836a5ea6a3a2279924c5b6eb98e9daffb9358)), closes [#30](https://github.com/madrigal-eschat/linux-game-haptics-router/issues/30)
+
 ## [0.2.2](https://github.com/madrigal-eschat/linux-game-haptics-router/compare/v0.2.1...v0.2.2) (2026-07-26)
 
 
