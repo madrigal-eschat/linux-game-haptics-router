@@ -1,11 +1,27 @@
 name: Build release binaries
 
-# Triggered by the tag semantic-release creates (release.yml). Builds each
-# required target in release mode, packages the binary, and attaches it to
-# the GitHub Release that already exists for this tag.
+# Called by release.yml right after semantic-release publishes a release.
+# Builds each required target in release mode, packages the binary, and
+# attaches it to the GitHub Release that already exists for the tag.
+#
+# Deliberately NOT triggered by `push: tags`: relying on the tag semantic-release
+# pushes to fire a second workflow silently failed for every release after
+# v0.1.0 (no binaries were ever attached). Calling it explicitly doesn't depend
+# on token/anti-recursion behaviour. Run it manually (workflow_dispatch) with a
+# tag to backfill binaries for an existing release.
 on:
-  push:
-    tags: ['v*.*.*']
+  workflow_call:
+    inputs:
+      tag:
+        description: Release tag to build and attach binaries to (e.g. v0.2.2)
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to build and attach binaries to (e.g. v0.2.2)
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -23,6 +39,8 @@ jobs:
             arch: linux-aarch64
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag }}
       - uses: ./.github/actions/rust-bpf-setup
         with:
           target: ${{ matrix.target }}
@@ -37,7 +55,7 @@ jobs:
 
       - name: Package
         run: |
-          pkg=game-haptics-router-${{ github.ref_name }}-${{ matrix.arch }}
+          pkg=game-haptics-router-${{ inputs.tag }}-${{ matrix.arch }}
           mkdir -p "$pkg"
           cp target/${{ matrix.target }}/release/game-haptics-router "$pkg/"
           tar czf "$pkg.tar.gz" "$pkg"
@@ -46,6 +64,7 @@ jobs:
       - name: Attach to GitHub release
         uses: softprops/action-gh-release@v3
         with:
+          tag_name: ${{ inputs.tag }}
           files: |
-            game-haptics-router-${{ github.ref_name }}-${{ matrix.arch }}.tar.gz
-            game-haptics-router-${{ github.ref_name }}-${{ matrix.arch }}.tar.gz.sha256
+            game-haptics-router-${{ inputs.tag }}-${{ matrix.arch }}.tar.gz
+            game-haptics-router-${{ inputs.tag }}-${{ matrix.arch }}.tar.gz.sha256

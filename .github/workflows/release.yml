@@ -3,13 +3,12 @@ name: Release
 # Runs semantic-release on every push to main. It inspects commits since the
 # last tag, and if any warrant a release, bumps every crate's Cargo.toml via
 # cargo-edit, updates CHANGELOG.md, commits, tags (vX.Y.Z), and publishes a
-# GitHub Release with generated notes. Tagging that release is what triggers
-# build-release.yml to attach platform binaries to it.
+# GitHub Release with generated notes. When a release was cut, the `binaries`
+# job then calls build-release.yml to attach platform binaries to it.
 #
 # Requires a `RELEASE_TOKEN` repo secret (PAT with `repo` scope, or a GitHub
-# App installation token). Tags/commits pushed with the default GITHUB_TOKEN
-# do NOT trigger other workflows (GitHub's anti-recursion guard), so
-# build-release.yml would never fire on the tag this job creates.
+# App installation token) so semantic-release's commit/tag push isn't done
+# with the default GITHUB_TOKEN.
 on:
   push:
     branches: [main]
@@ -26,6 +25,8 @@ concurrency:
 jobs:
   release:
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -51,3 +52,17 @@ jobs:
       - run: npx semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+
+      # semantic-release leaves HEAD on the release commit it tagged; empty
+      # if no release was warranted.
+      - id: tag
+        run: echo "tag=$(git tag --points-at HEAD 'v*.*.*' | head -n1)" >> "$GITHUB_OUTPUT"
+
+  binaries:
+    needs: release
+    if: needs.release.outputs.tag != ''
+    uses: ./.github/workflows/build-release.yml
+    with:
+      tag: ${{ needs.release.outputs.tag }}
+    permissions:
+      contents: write
