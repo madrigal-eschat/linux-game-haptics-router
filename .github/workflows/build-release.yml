@@ -65,6 +65,10 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ inputs.tag }}
+          # softprops defaults draft to false and would publish the release on
+          # the first matrix job's upload, locking out the other arch (immutable
+          # releases). release.yml's `publish` job does the publishing.
+          draft: true
           files: |
             game-haptics-router-${{ inputs.tag }}-${{ matrix.arch }}.tar.gz
             game-haptics-router-${{ inputs.tag }}-${{ matrix.arch }}.tar.gz.sha256
