@@ -1,3 +1,10 @@
+## [0.2.4](https://github.com/madrigal-eschat/linux-game-haptics-router/compare/v0.2.3...v0.2.4) (2026-10-10)
+
+
+### Bug Fixes
+
+* **release:** create draft releases, attach binaries, then publish ([c155fd0](https://github.com/madrigal-eschat/linux-game-haptics-router/commit/c155fd05fb1da51a32946028dd41a488d582fd7e)), closes [#30](https://github.com/madrigal-eschat/linux-game-haptics-router/issues/30)
+
 ## [0.2.3](https://github.com/madrigal-eschat/linux-game-haptics-router/compare/v0.2.2...v0.2.3) (2026-10-10)
 
 
