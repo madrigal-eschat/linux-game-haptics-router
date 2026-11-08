@@ -4,8 +4,8 @@ version = "0.2.5"
 edition = "2021"
 
 [dependencies]
-aya-ebpf = "0.2"
-aya-log-ebpf = "0.2"
+aya-ebpf = "0.3"
+aya-log-ebpf = "0.3"
 linux-game-haptics-router-common = { path = "../linux-game-haptics-router-common" }
 
 [[bin]]
